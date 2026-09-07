@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XAFS Workbench</title>
+  <link rel="stylesheet" href="./static/style.css?v=27">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">Hard X-ray Analysis</p>
+      <h1>XAFS Workbench</h1>
+      <p class="subtitle">Athena 数据处理 · Artemis FEFF 拟合 · Hephaestus 元素数据库</p>
+    </div>
+    <div id="backend-status" class="status">正在检查计算后端…</div>
+  </header>
+
+  <nav>
+    <button class="tab active" data-tab="athena">Athena</button>
+    <button class="tab" data-tab="artemis">Artemis</button>
+    <button class="tab" data-tab="analysis">结果分析</button>
+    <button class="tab" data-tab="hephaestus">Hephaestus</button>
+  </nav>
+
+  <main>
+    <details class="card web-connector" open>
+      <summary>网页计算后端连接</summary>
+      <p class="hint">本地打开时留空即可；从 GitHub Pages 打开时默认连接 <code>http://127.0.0.1:8765</code>。Athena、Artemis、FEFF 与小波计算仍由后端完成。</p>
+      <div class="backend-connect-row">
+        <label>后端地址<input id="api-base-url" type="url" placeholder="http://127.0.0.1:8765" spellcheck="false"></label>
+        <button id="save-api-base" class="primary" type="button">保存并连接</button>
+        <button id="use-local-api" class="secondary" type="button">使用本机后端</button>
+      </div>
+      <p id="api-base-message" class="message"></p>
+    </details>
+    <details class="card native-connector">
+      <summary>原生 Athena / Artemis / HAMA 软件连接</summary>
+      <p class="hint">本项目不打包第三方可执行文件。可从官方主页安装，再由本地网页显式启动；没有检测到原生软件时继续使用的结果会明确标为 Larch/HAMA-compatible。</p>
+      <div id="native-tool-list" class="native-tool-list"></div>
+      <p id="native-tool-message" class="message"></p>
+      <p class="hint">自动检测顺序：环境变量、<code>native_tools.local.json</code>、系统 PATH。配置示例见仓库中的 <code>native_tools.example.json</code>。</p>
+    </details>
+    <section id="athena" class="panel active">
+      <div class="layout">
+        <form id="process-form" class="card controls">
+          <h2>数据与处理参数</h2>
+          <label>内置数据<select name="dataset" class="dataset-select"></select></label>
+          <label>或上传数据<input type="file" name="data_file"></label>
+          <details class="multi-builder">
+            <summary>多条数据处理与叠加</summary>
+            <label>内置数据（Ctrl/Shift 多选）<select id="athena-multi-datasets" multiple size="8"></select></label>
+            <label>或一次上传多条数据<input id="athena-multi-files" type="file" multiple></label>
+            <div class="toolbar"><button id="run-athena-multi" class="secondary" type="button">处理并叠加显示</button><button id="clear-athena-multi" class="secondary" type="button">清除叠加</button></div>
+            <div id="multi-message" class="message"></div>
+          </details>
+          <div class="grid two">
+            <label>信号模式<select name="signal_mode"><option value="auto">自动识别</option><option value="direct">直接 μ(E) 列</option><option value="transmission">透射 ln(I0/It)</option><option value="fluorescence">荧光 If/I0</option></select></label>
+            <label>能量列（从0开始）<input name="energy_column" value="0" type="number"></label>
+            <label>直接信号列<input name="signal_column" value="-1" type="number"></label>
+            <label>I0 列<input name="i0_column" value="1" type="number"></label>
+            <label>It / If 列<input name="it_if_column" value="2" type="number"></label>
+          </div>
+          <div class="divider"></div>
+          <details class="calibration-builder" open>
+            <summary>标准峰能量对齐</summary>
+            <label>标准库参考谱<select id="reference-dataset" name="reference_dataset" class="dataset-select"></select></label>
+            <div class="grid two">
+              <label>对齐峰<select id="peak-mode" name="peak_mode"><option value="e0">E₀ / 一阶导数峰</option><option value="white_line">白线峰</option></select></label>
+              <label>标准峰位置 (eV)<input id="reference-peak" name="reference_peak" type="number" step="0.01" placeholder="自动读取标准谱"></label>
+              <label>样品峰位置 (eV)<input id="sample-peak" name="sample_peak" type="number" step="0.01" placeholder="自动寻找；也可手填"></label>
+              <label>记忆的 ΔE (eV)<input id="remembered-shift" type="number" step="0.01" readonly></label>
+            </div>
+            <div class="toolbar">
+              <button id="calculate-alignment" class="secondary" type="button">计算并应用峰位移</button>
+              <button id="pick-sample-peak" class="secondary" type="button">从图上选样品峰</button>
+              <button id="remember-shift" class="secondary" type="button">记住当前位移</button>
+              <button id="reuse-shift" class="secondary" type="button">复用已记住位移</button>
+            </div>
+            <div id="alignment-message" class="message">选择标准谱后，可自动寻找标准峰和样品峰。</div>
+          </details>
+          <div class="divider"></div>
+          <label class="check"><input name="auto_e0" type="checkbox">自动寻找 E₀</label>
+          <div class="e0-control">
+            <label>E₀ (eV)<input id="e0-number" name="e0" value="11215" type="number" step="0.1"></label>
+            <label class="slider-label">拖动实时调节<input id="e0-slider" type="range" min="11180" max="11250" value="11215" step="0.1"></label>
+            <output id="e0-live-value">11215.0 eV</output>
+          </div>
+          <div class="grid three">
+            <label>能量校准 ΔE (eV)<input name="energy_shift" value="0" type="number" step="0.1"></label>
+            <label>截取下限 (eV)<input name="energy_min" placeholder="留空不截取" type="number" step="0.1"></label>
+            <label>截取上限 (eV)<input name="energy_max" placeholder="留空不截取" type="number" step="0.1"></label>
+            <label>自动去毛刺 σ<input name="deglitch_sigma" value="0" type="number" step="0.5" min="0"></label>
+            <label>归一化显示<select name="flatten"><option value="true" selected>Athena 边后扁平化</option><option value="false">普通 norm（保留边后斜率）</option></select></label>
+            <label class="span-two">手动排除区间<input name="exclude_ranges" placeholder="例如 11230-11232, 11405-11406"></label>
+            <label>Pre 1<input name="pre1" value="-150" type="number"></label>
+            <label>Pre 2<input name="pre2" value="-30" type="number"></label>
+            <label>Norm 1<input name="norm1" value="150" type="number"></label>
+            <label>Norm 2<input name="norm2" value="700" type="number"></label>
+            <label>Rbkg (Å)<input name="rbkg" value="1.0" type="number" step="0.05"></label>
+            <label>kmin<input name="kmin" value="3" type="number" step="0.1"></label>
+            <label>kmax<input name="kmax" value="12" type="number" step="0.1"></label>
+            <label>k-weight<select name="kweight"><option>1</option><option selected>2</option><option>3</option></select></label>
+            <label>dk<input name="dk" value="1" type="number" step="0.1"></label>
+            <label>FT 窗口<select name="window"><option value="kaiser" selected>Kaiser–Bessel（Athena）</option><option value="hanning">Hanning</option></select></label>
+            <label>R 图上限 (Å)<input id="r-plot-max" value="6" type="number" min="2" max="15" step="0.5"></label>
+          </div>
+          <button class="primary" type="submit">处理数据</button>
+          <p class="hint">拖动 E₀ 后约 0.3 秒自动重算。自动模式优先识别文件头；含零值的透射通道请改用荧光模式。</p>
+        </form>
+
+        <div class="results">
+          <div id="athena-message" class="message">选择数据并运行处理。</div>
+          <div class="toolbar"><button id="download-energy" class="secondary" hidden>下载归一化 CSV</button><button id="download-project" class="secondary" hidden>保存处理项目 JSON</button><button id="send-to-fit" class="secondary" hidden>传递到 Artemis 拟合</button></div>
+          <div class="metrics" id="athena-metrics"></div>
+          <article class="card"><h3>标准峰对齐检查</h3><div id="alignment-summary" class="range-summary"></div><div id="plot-alignment" class="plot"><p class="hint">计算峰位移后显示标准谱与对齐样品。</p></div></article>
+          <article class="card"><h3>μ(E) 与归一化</h3><div id="energy-ranges" class="range-summary"></div><div id="plot-energy" class="plot"></div></article>
+          <article class="card"><h3>归一化谱一阶导数</h3><div id="plot-derivative" class="plot"></div></article>
+          <article class="card"><h3>k 空间</h3><div id="plot-k" class="plot"></div></article>
+          <article class="card"><div class="plot-heading"><h3>R 空间</h3><div class="plot-options"><label class="check"><input id="show-r-mag" type="checkbox" checked>幅值 |χ(R)|</label><label class="check"><input id="show-r-real" type="checkbox">实部</label><label class="check"><input id="show-r-imag" type="checkbox">虚部</label></div></div><div id="plot-r" class="plot"></div></article>
+          <article id="multi-results" class="card" hidden><h3>多谱处理结果</h3><div id="multi-table"></div><h4>归一化谱叠加</h4><div id="plot-multi-energy" class="plot"></div><h4>k 空间叠加</h4><div id="plot-multi-k" class="plot"></div><h4>R 空间幅值叠加</h4><div id="plot-multi-r" class="plot"></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="artemis" class="panel">
+      <div class="layout">
+        <form id="fit-form" class="card controls">
+          <h2>FEFF 路径拟合</h2>
+          <p id="fit-source" class="fit-source">尚未传递处理结果；拟合时将读取 Athena 当前数据及全部预处理参数。</p>
+          <section class="manager-panel">
+            <h3>拟合参数智能管理器</h3>
+            <input name="s02_source" type="hidden" value="manual">
+            <div class="grid two"><label>拟合模式<select id="fit-mode" name="fit_mode"><option value="standard">标准样标定 S₀²</option><option value="unknown" selected>未知样品拟合</option><option value="advanced">高级自定义约束</option></select></label><label>拟合策略<select name="smart_fit"><option value="true" selected>智能分阶段拟合</option><option value="false">单次拟合</option></select></label></div>
+            <label>σ² 温度审查<select name="temperature_profile"><option value="low">低温：0.002–0.006 Å²</option><option value="room" selected>室温：0.003–0.010 Å²</option><option value="high">高温：0.006–0.015 Å²</option><option value="general">通用：0.001–0.020 Å²</option></select></label>
+            <div class="saved-calibration">已保存的 S₀²：<strong id="saved-s02">尚未标定</strong></div>
+            <div class="toolbar"><button id="apply-saved-s02" class="secondary" type="button">应用已标定 S₀²</button><button id="save-fitted-s02" class="secondary" type="button" disabled>保存本次 S₀²</button></div>
+            <p class="hint">标准样：固定已知 CN，逐步拟合 ΔE₀/ΔR、σ²、S₀²；未知样：固定标定的 S₀²，先拟合第一壳，再逐壳加入路径。每条路径的 shell 可在下方修改。</p>
+            <div class="fit-guidance"><strong>经验审查范围</strong><span>S₀²：优选 0.80–1.00，通用 0.75–1.05</span><span>|ΔE₀|：≤10 eV，优选 ≤5 eV</span><span>|ΔR|：≤0.10 Å，优选 ≤0.05 Å</span><small>这是复核建议，不是所有材料通用的硬边界。</small></div>
+          </section>
+          <details class="feff-builder" open>
+            <summary>CIF → FEFF 路径</summary>
+            <label>CIF 结构文件<input id="cif-file" name="cif_file" type="file" accept=".cif"></label>
+            <div class="grid three">
+              <label>吸收原子<input name="absorber" value="Ir" maxlength="2"></label>
+              <label>吸收边<select name="edge"><option>L3</option><option>L2</option><option>L1</option><option>K</option></select></label>
+              <label>团簇半径 (Å)<input name="cluster_radius" value="7" type="number" min="3" max="12" step="0.5"></label>
+            </div>
+            <input id="feff-result-id" name="feff_result_id" type="hidden">
+            <input id="feff-path-names" name="feff_path_names" type="hidden" value="[]">
+            <div class="toolbar"><button id="run-feff" class="primary" type="button">生成并传递 FEFF 路径</button><button id="download-feff" class="secondary" type="button" hidden>下载 FEFF 路径包</button></div>
+            <div id="feff-message" class="message"></div>
+            <div id="generated-feff-paths" class="feff-path-list" hidden></div>
+          </details>
+          <div class="divider"></div>
+          <label>或手工选择 FEFF 路径文件<input id="path-files" name="path_files" type="file" multiple accept=".dat"></label>
+          <div class="grid two"><label>参数预设<select id="fit-preset"><option value="auto">自动判断</option><option value="unknown">未知样品：固定 S₀²</option><option value="ir_foil">Ir foil：固定 CN=12，拟合 S₀²</option><option value="iro2">IrO₂：第一壳 Ir–O，CN≈6</option></select></label><button id="apply-fit-preset" class="secondary compact-button" type="button">应用预设</button></div>
+          <button id="suggest-fit" class="secondary" type="button">重新读取路径建议</button>
+          <div id="suggest-message" class="message">建议值只是拟合起点，路径选择与物理约束仍需人工判断。</div>
+          <div id="path-editor" class="path-editor"></div>
+          <details class="advanced-json"><summary>查看自动生成的路径 JSON</summary><textarea id="path-settings" name="path_settings" rows="12" readonly>[]</textarea></details>
+          <div class="divider"></div>
+          <h3>全局 GDS 参数</h3>
+          <div class="parameter-card">
+            <strong>S₀² 振幅缩减因子</strong>
+            <div class="grid three"><label>初值<input name="s02" value="0.85" type="number" step="any"></label><label>下限<input name="s02_min" value="0.5" type="number" step="any"></label><label>上限<input name="s02_max" value="1.2" type="number" step="any"></label></div>
+            <label class="check"><input name="s02_vary" type="checkbox">允许变化（取消勾选即固定为初值）</label>
+          </div>
+          <div class="parameter-card">
+            <strong>ΔE₀ 能量修正</strong>
+            <div class="grid three"><label>初值 (eV)<input name="de0" value="0.00" type="number" step="0.01"></label><label>下限<input name="de0_min" value="-10" type="number" step="0.01"></label><label>上限<input name="de0_max" value="10" type="number" step="0.01"></label></div>
+            <label class="check"><input name="de0_vary" type="checkbox" checked>允许变化（取消勾选即固定为初值）</label>
+          </div>
+          <h3>拟合与变换范围</h3>
+          <div class="grid two">
+            <label>拟合空间<select name="fitspace"><option value="r">R space（限定 R，K 继承 Athena）</option><option value="k">K space（限定 K）</option></select></label>
+            <label>拟合 k-weight<select name="fit_kweights"><option value="2" selected>k²（默认）</option><option value="1">k¹</option><option value="3">k³</option><option value="1,2">联合 k¹+k²</option><option value="2,3">联合 k²+k³</option><option value="1,2,3">联合 k¹+k²+k³</option></select></label>
+            <label id="fit-kmin-field">拟合 kmin (Å⁻¹)<input name="fit_kmin" value="3.0" type="number" min="0" step="0.1"></label>
+            <label id="fit-kmax-field">拟合 kmax (Å⁻¹)<input name="fit_kmax" value="12.0" type="number" min="0" step="0.1"></label>
+            <label id="fit-rmin-field">拟合 Rmin (Å)<input name="rmin" value="1.0" type="number" min="0" step="0.1"></label>
+            <label id="fit-rmax-field">拟合 Rmax (Å)<input name="rmax" value="3.5" type="number" min="0" step="0.1"></label>
+            <label>k 窗口边宽 dk<input name="fit_dk" value="1.0" type="number" step="0.1"></label>
+            <label>k 窗口<select name="fit_window"><option value="kaiser" selected>Kaiser–Bessel</option><option value="hanning">Hanning</option></select></label>
+            <label>R 窗口<select name="fit_rwindow"><option value="hanning" selected>Hanning</option><option value="kaiser">Kaiser–Bessel</option></select></label>
+            <label>小波 k-weight<select name="wavelet_kweight"><option>1</option><option selected>2</option><option>3</option></select></label>
+            <label>小波 R 上限<input name="wavelet_rmax" value="6" type="number" min="2" max="10" step="0.5"></label>
+            <label>小波后端<select name="wavelet_backend"><option value="hama" selected>HAMA Morlet（推荐）</option><option value="cauchy">Larch Cauchy（对照）</option></select></label>
+            <label id="hama-kappa-field">HAMA κ<input name="wavelet_kappa" value="10" type="number" min="1" max="40" step="0.5"></label>
+            <label id="hama-sigma-field">HAMA σ<input name="wavelet_sigma" value="1" type="number" min="0.1" max="5" step="0.1"></label>
+          </div>
+          <p id="fit-range-mode-hint" class="hint"></p>
+          <div id="fit-field-errors" class="field-error-summary" hidden></div>
+          <input id="fit-max-shell" name="fit_max_shell" type="hidden">
+          <section class="shell-fit-wizard"><strong>逐壳拟合</strong><label>第二壳拟合空间<select id="second-shell-fitspace"><option value="r" selected>R space</option><option value="k">k space</option></select></label><div class="toolbar"><button id="fit-first-shell" class="secondary" type="button">① 仅拟合第一壳</button><button id="fit-second-shell" class="secondary" type="button">② 回填后加入第二壳拟合</button><button id="fit-all-shells" class="secondary" type="button">拟合全部已选壳层</button></div><p id="shell-fit-status" class="hint">第一壳完成后会自动回填参数；第二步可选择 R 或 k 空间。</p></section>
+          <button class="primary" type="submit">运行 FEFF 拟合</button>
+        </form>
+        <div class="results">
+          <div id="fit-message" class="message">上传 FEFF 路径后运行拟合。</div>
+          <div id="fit-warnings"></div>
+          <article class="card"><h3>智能拟合过程</h3><div id="fit-manager-decisions"></div><div id="fit-stage-table"></div></article>
+          <div class="metrics" id="fit-metrics"></div>
+          <article class="card"><h3>能量空间：Athena 处理结果与 FEFF 拟合投影</h3><p class="hint">显示原始 μ(E)、flattened 归一化谱、前边线和后边线；红线为 FEFF 拟合数据，仅覆盖实际 EXAFS 拟合能区。FEFF 不拟合完整 μ(E)/XANES 白线。</p><div id="plot-fit-energy" class="plot"></div><button class="secondary plot-svg-download" data-plot="plot-fit-energy" data-name="athena_energy_with_feff_fit.svg" type="button">下载能量空间图 SVG</button></article>
+          <article class="card"><h3>K 空间：实验谱与拟合谱叠加</h3><div id="plot-fit" class="plot"></div><button class="secondary plot-svg-download" data-plot="plot-fit" data-name="k_space_experimental_fit.svg" type="button">下载 K 空间图 SVG</button></article>
+          <article class="card"><h3>R 空间：实验谱与拟合谱叠加</h3><div id="plot-fit-r" class="plot"></div><button class="secondary plot-svg-download" data-plot="plot-fit-r" data-name="r_space_experimental_fit.svg" type="button">下载 R 空间图 SVG</button></article>
+          <article class="card"><h3>拟合参数</h3><div id="global-fit-table"></div><div id="fit-table"></div><div id="fit-download-addresses" class="toolbar" hidden><a id="fit-data-url" class="primary" href="#" download>下载原始/拟合数据 CSV</a><a id="fit-wavelet-url" class="secondary" href="#" download>下载小波数据 ZIP</a><a id="fit-package-url" class="secondary" href="#" download>下载完整结果 ZIP</a></div><div class="toolbar"><button id="download-fit-package" class="primary" hidden>下载完整拟合数据包 ZIP</button><button id="download-fit" class="secondary" hidden>下载参数 CSV</button><button id="download-fit-curves" class="secondary" hidden>下载实验/拟合数据 CSV</button><button id="download-fit-json" class="secondary" hidden>下载完整结果 JSON</button></div></article>
+          <article class="card"><h3>参数物理范围审查</h3><div class="assessment-legend"><span class="assessment-ok">● 范围内</span><span class="assessment-warning">● 建议复核</span><span class="assessment-danger">● 明显异常</span></div><div id="fit-assessment"></div><button id="refill-fit-values" class="secondary" type="button" disabled>把本次结果回填为新初值</button><p class="hint">回填后仍可手工调整初值、上下限或固定状态，再点击“运行 FEFF 拟合”。</p></article>
+          <article class="card artemis-report"><h3>Artemis 风格拟合结果</h3><div id="artemis-fit-summary"></div><h4>Variables（GDS）</h4><div id="artemis-variable-table"></div><h4>Paths</h4><div id="artemis-path-table"></div><h4>论文格式路径参数表</h4><div id="paper-fit-table"></div><div id="paper-fit-notes" class="paper-notes"></div></article>
+          <article class="card"><h3 id="wavelet-title">HAMA Morlet 小波变换</h3><p id="wavelet-description" class="hint">横轴 k，纵轴 R，颜色表示小波幅值；实验与拟合使用相同色标。默认 κ=10、σ=1。</p><div class="wavelet-grid"><figure><figcaption>实验数据</figcaption><canvas id="wavelet-data"></canvas></figure><figure><figcaption>拟合数据</figcaption><canvas id="wavelet-model"></canvas></figure></div></article>
+          <article class="card"><h3>主要参数相关性</h3><div id="correlation-table"></div></article>
+          <details class="card"><summary>完整 FEFFIT 报告</summary><pre id="fit-report"></pre></details>
+        </div>
+      </div>
+    </section>
+
+    <section id="analysis" class="panel">
+      <div class="layout">
+        <form id="analysis-form" class="card controls">
+          <h2>XANES 与批量分析</h2>
+          <p class="hint">样品和预处理参数沿用 Athena 页。LCF 前应先确认参考谱已使用同一能量标尺和归一化参数。</p>
+          <label>LCF 参考谱 1<select name="ref1" class="dataset-select"></select></label>
+          <label>LCF 参考谱 2<select name="ref2" class="dataset-select"></select></label>
+          <div class="grid two">
+            <label>LCF 能量下限<input name="lcf_emin" value="11200" type="number" step="0.1"></label>
+            <label>LCF 能量上限<input name="lcf_emax" value="11285" type="number" step="0.1"></label>
+          </div>
+          <label class="check"><input name="sum_to_one" type="checkbox" checked>组分之和约束为 1</label>
+          <button class="primary" type="submit">运行 XANES / LCF 分析</button>
+          <div class="divider"></div>
+          <label>批量样品（Ctrl/Shift 多选）<select id="batch-datasets" multiple size="12"></select></label>
+          <div class="grid two">
+            <label>批量统一 ΔE (eV)<input id="batch-energy-shift" type="number" step="0.01" value="0"></label>
+            <button id="batch-use-remembered" class="secondary compact-button" type="button">使用记忆位移</button>
+          </div>
+          <button id="run-batch" class="secondary" type="button">生成批量质量汇总</button>
+          <button id="download-standardized-batch" class="primary" type="button">批量标准化并下载 ZIP</button>
+        </form>
+        <div class="results">
+          <div id="analysis-message" class="message">选择两个参考谱进行线性组合拟合。</div>
+          <div class="metrics" id="analysis-metrics"></div>
+          <article class="card"><h3>XANES 与一阶导数</h3><div id="plot-analysis-xanes" class="plot"></div></article>
+          <article class="card"><h3>线性组合拟合</h3><div id="lcf-table"></div><div id="plot-lcf" class="plot"></div></article>
+          <article class="card"><h3>批量数据质量</h3><div id="batch-table"></div><button id="download-batch" class="secondary" hidden>下载 CSV</button></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="hephaestus" class="panel">
+      <article class="card compact">
+        <h2>元素与吸收边查询</h2>
+        <form id="edge-form" class="inline"><label>元素符号<input name="symbol" value="Ir" maxlength="2"></label><button class="primary">查询</button></form>
+        <div id="edge-message" class="message"></div>
+        <div id="edge-table"></div>
+      </article>
+    </section>
+  </main>
+
+  <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
+  <script src="./static/app.js?v=27"></script>
+</body>
+</html>
