@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=27">
+  <link rel="stylesheet" href="./static/style.css?v=28">
 </head>
 <body>
   <header>
@@ -35,8 +35,9 @@
       <p id="api-base-message" class="message"></p>
     </details>
     <details class="card native-connector">
-      <summary>原生 Athena / Artemis / HAMA 软件连接</summary>
-      <p class="hint">本项目不打包第三方可执行文件。可从官方主页安装，再由本地网页显式启动；没有检测到原生软件时继续使用的结果会明确标为 Larch/HAMA-compatible。</p>
+      <summary>原生 Athena / Artemis / Hephaestus / HAMA 软件连接</summary>
+      <p class="hint">安装状态与运行状态分别检测。数据处理固定调用本机 Demeter/IFEFFIT，不使用 XrayLarch；原生 Artemis 拟合桥接完成前不会回退到 XrayLarch。</p>
+      <div class="toolbar"><button id="refresh-native-tools" class="secondary" type="button">刷新运行状态</button></div>
       <div id="native-tool-list" class="native-tool-list"></div>
       <p id="native-tool-message" class="message"></p>
       <p class="hint">自动检测顺序：环境变量、<code>native_tools.local.json</code>、系统 PATH。配置示例见仓库中的 <code>native_tools.example.json</code>。</p>
@@ -184,7 +185,7 @@
             <label>R 窗口<select name="fit_rwindow"><option value="hanning" selected>Hanning</option><option value="kaiser">Kaiser–Bessel</option></select></label>
             <label>小波 k-weight<select name="wavelet_kweight"><option>1</option><option selected>2</option><option>3</option></select></label>
             <label>小波 R 上限<input name="wavelet_rmax" value="6" type="number" min="2" max="10" step="0.5"></label>
-            <label>小波后端<select name="wavelet_backend"><option value="hama" selected>HAMA Morlet（推荐）</option><option value="cauchy">Larch Cauchy（对照）</option></select></label>
+            <label>小波后端<select name="wavelet_backend"><option value="hama" selected>HAMA Morlet</option></select></label>
             <label id="hama-kappa-field">HAMA κ<input name="wavelet_kappa" value="10" type="number" min="1" max="40" step="0.5"></label>
             <label id="hama-sigma-field">HAMA σ<input name="wavelet_sigma" value="1" type="number" min="0.1" max="5" step="0.1"></label>
           </div>
@@ -255,6 +256,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="./static/app.js?v=27"></script>
+  <script src="./static/app.js?v=28"></script>
 </body>
 </html>

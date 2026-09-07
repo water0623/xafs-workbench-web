@@ -93,6 +93,24 @@ function drawPlot(id,series,xlabel,ylabel,options={}){
 async function jsonFetch(url,opts={}){const res=await fetch(apiUrl(url),opts);let data;try{data=await res.json()}catch{throw new Error(`后端返回了非 JSON 响应（HTTP ${res.status}）`)}if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);return data}
 async function fitFetchWithRecovery(formData){try{return await jsonFetch('/api/artemis',{method:'POST',body:formData})}catch(err){if(!String(err.message).toLowerCase().includes('fetch'))throw err;message('#fit-message','本地服务连接瞬时中断，正在检查并自动重试一次…');await new Promise(resolve=>setTimeout(resolve,1200));await jsonFetch('/api/status');return jsonFetch('/api/artemis',{method:'POST',body:formData})}}
 
+function renderNativeTools(nativeTools){
+  const toolList=$('#native-tool-list');if(!toolList)return;
+  toolList.innerHTML=Object.values(nativeTools).map(tool=>{
+    const stateClass=tool.running?'running':(tool.available?'available':'missing');
+    const detail=tool.running?`正在运行 · PID ${tool.process_ids.join(', ')}`:(tool.available?`已安装 · ${tool.source}`:'尚未检测到本机程序');
+    const disabled=tool.running||!tool.available||apiIsCrossOrigin();
+    const label=tool.running?'已运行':'启动';
+    const title=apiIsCrossOrigin()&&!tool.running?'远程网页不能启动本机程序；请从本地工作台启动':'';
+    return `<article class="native-tool ${stateClass}"><div><strong>${escapeHtml(tool.label)}</strong><span>${escapeHtml(tool.role)}</span><small>${escapeHtml(detail)}</small></div><div class="toolbar"><a class="secondary" href="${escapeHtml(tool.homepage)}" target="_blank" rel="noopener">官方主页</a><button class="secondary native-launch" data-tool="${escapeHtml(tool.name)}" type="button" title="${escapeHtml(title)}" ${disabled?'disabled':''}>${label}</button></div></article>`;
+  }).join('');
+}
+
+async function refreshNativeTools(){
+  const result=await jsonFetch('/api/native/status');renderNativeTools(result.tools||{});
+  const running=Object.values(result.tools||{}).filter(tool=>tool.running);
+  message('#native-tool-message',running.length?`已检测到 ${running.length} 个正在运行的原生程序：${running.map(tool=>tool.label).join('、')}`:'没有检测到正在运行的原生程序',running.length?'ok':'');
+}
+
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab,.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active')});
 
 async function boot(){
@@ -101,14 +119,10 @@ async function boot(){
   const [status,files]=await Promise.all([jsonFetch('/api/status'),jsonFetch('/api/datasets')]);
   const st=$('#backend-status');
   const nativeTools=status.native_tools||{},nativeReady=status.native_mode_ready;
-  st.textContent=nativeReady?'原生 Athena / Artemis / HAMA 已连接':(status.larch?'Larch / FEFF / HAMA-compatible 后端就绪':'兼容预处理与 HAMA-compatible 可用 · Larch/FEFF 未安装');
-  if(!status.larch)st.classList.add('warn');
-  if(!nativeReady)st.classList.add('warn');
-  else st.classList.remove('warn');
+  st.textContent=nativeReady?'Demeter / IFEFFIT 数据处理就绪 · XrayLarch 已禁用':'未检测到 Demeter / IFEFFIT 后端';
+  st.classList.toggle('warn',!nativeReady||!status.artemis_ready);
   message('#api-base-message',`已连接：${apiBase||location.origin} · ${status.athena_backend}`,'ok');
-  const toolList=$('#native-tool-list');
-  if(toolList)toolList.innerHTML=Object.values(nativeTools).map(tool=>`<article class="native-tool ${tool.available?'available':'missing'}"><div><strong>${escapeHtml(tool.label)}</strong><span>${escapeHtml(tool.role)}</span><small>${tool.available?`已检测：${escapeHtml(tool.source)}`:'尚未检测到本机程序'}</small></div><div class="toolbar"><a class="secondary" href="${escapeHtml(tool.homepage)}" target="_blank" rel="noopener">官方主页</a><button class="secondary native-launch" data-tool="${escapeHtml(tool.name)}" type="button" ${tool.available?'':'disabled'}>启动</button></div></article>`).join('');
-  if(apiIsCrossOrigin()){$$('.native-launch').forEach(button=>{button.disabled=true;button.title='远程网页不能启动本机程序；请在本地工作台中启动'})}
+  renderNativeTools(nativeTools);
   $$('.dataset-select').forEach(sel=>sel.innerHTML=files.map(f=>`<option>${escapeHtml(f)}</option>`).join(''));
   $('#batch-datasets').innerHTML=files.map(f=>`<option>${escapeHtml(f)}</option>`).join('');
   $('#athena-multi-datasets').innerHTML=files.map(f=>`<option>${escapeHtml(f)}</option>`).join('');
@@ -128,10 +142,12 @@ $('#use-local-api').onclick=()=>{$('#api-base-url').value='http://127.0.0.1:8765
 document.addEventListener('click',async event=>{
   const button=event.target.closest('.native-launch');if(!button)return;
   button.disabled=true;message('#native-tool-message',`正在启动 ${button.dataset.tool}…`);
-  try{const result=await jsonFetch('/api/native/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:button.dataset.tool})});message('#native-tool-message',`${result.tool.label} 已启动。`,'ok')}
+  try{const result=await jsonFetch('/api/native/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:button.dataset.tool})});message('#native-tool-message',`${result.tool.label} 已启动。`,'ok');setTimeout(()=>refreshNativeTools().catch(()=>{}),1500)}
   catch(err){message('#native-tool-message',err.message,'error')}
   finally{button.disabled=false}
 });
+$('#refresh-native-tools').onclick=()=>refreshNativeTools().catch(err=>message('#native-tool-message',err.message,'error'));
+setInterval(()=>refreshNativeTools().catch(()=>{}),5000);
 
 async function runProcess(form,quiet=false){
   if(processController)processController.abort();
