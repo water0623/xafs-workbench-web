@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=28">
+  <link rel="stylesheet" href="./static/style.css?v=29">
 </head>
 <body>
   <header>
@@ -36,7 +36,7 @@
     </details>
     <details class="card native-connector">
       <summary>原生 Athena / Artemis / Hephaestus / HAMA 软件连接</summary>
-      <p class="hint">安装状态与运行状态分别检测。数据处理固定调用本机 Demeter/IFEFFIT，不使用 XrayLarch；原生 Artemis 拟合桥接完成前不会回退到 XrayLarch。</p>
+      <p class="hint">安装状态与运行状态分别检测。数据处理和 FEFF 拟合固定调用本机 Demeter/IFEFFIT，不使用 XrayLarch；小波变换调用 ESRF HAMA Fortran。</p>
       <div class="toolbar"><button id="refresh-native-tools" class="secondary" type="button">刷新运行状态</button></div>
       <div id="native-tool-list" class="native-tool-list"></div>
       <p id="native-tool-message" class="message"></p>
@@ -256,6 +256,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="./static/app.js?v=28"></script>
+  <script src="./static/app.js?v=29"></script>
 </body>
 </html>
