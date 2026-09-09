@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Browser-native XAFS processing and FEFF-path fitting workbench">
   <title>Open XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=30">
+  <link rel="stylesheet" href="./static/style.css?v=31">
+  <link rel="stylesheet" href="./static/athena_display.css?v=1">
 </head>
 <body>
 <header class="topbar">
@@ -28,7 +29,7 @@
   <section class="card notice">
     <div>
       <strong>公开在线版已经脱离 localhost。</strong>
-      <p>数据在当前浏览器中计算，不上传到作者电脑，也不依赖 Codex、Python 或任何本地服务。Athena 页完成归一化、χ(k) 与 FT(R)；Artemis 页可读取 FEFF 路径文件进行浏览器端路径拟合。</p>
+      <p>数据在当前浏览器中计算，不上传到作者电脑，也不依赖 Codex、Python 或任何本地服务。Athena 页按 Raw μ(E) → Normalized μ(E) → χ(k) → FT(R) 的顺序显示。</p>
     </div>
     <div class="badge-row">
       <span class="badge">No localhost</span><span class="badge">No server upload</span><span class="badge">Client-side compute</span>
@@ -83,10 +84,21 @@
       <div class="results">
         <div id="athena-message" class="message">请选择数据并点击“处理数据”。</div>
         <div id="athena-metrics" class="metrics"></div>
-        <article class="card"><h3>μ(E) 与归一化</h3><div id="plot-energy" class="plot"></div></article>
-        <article class="card"><h3>归一化谱一阶导数</h3><div id="plot-derivative" class="plot"></div></article>
-        <article class="card"><h3>k 空间：k<sup>w</sup>χ(k)</h3><div id="plot-k" class="plot"></div></article>
-        <article class="card"><h3>R 空间：|χ(R)|</h3><div id="plot-r" class="plot"></div></article>
+
+        <div class="spectrum-stack">
+          <article class="card">
+            <div class="plot-heading"><div><h3>① 原始数据：Raw μ(E)</h3><p class="plot-note"><span class="raw-tag">RAW</span> 未扣背景、未归一化的实验吸收谱，用于检查原始数据质量、吸收边和能量位置。</p></div></div>
+            <div id="plot-raw-energy" class="plot"></div>
+          </article>
+          <article class="card">
+            <div class="plot-heading"><div><h3>② 归一化数据：Normalized μ(E)</h3><p class="plot-note"><span class="norm-tag">NORMALIZED</span> 扣除 pre-edge 并按 post-edge edge step 归一化后的谱，用于后续 χ(k) 转换。</p></div></div>
+            <div id="plot-normalized-energy" class="plot"></div>
+          </article>
+        </div>
+
+        <article class="card"><h3>③ 归一化谱一阶导数</h3><div id="plot-derivative" class="plot"></div></article>
+        <article class="card"><h3>④ k 空间：k<sup>w</sup>χ(k)</h3><div id="plot-k" class="plot"></div></article>
+        <article class="card"><h3>⑤ R 空间：|χ(R)|</h3><div id="plot-r" class="plot"></div></article>
       </div>
     </div>
   </section>
@@ -170,6 +182,7 @@
 </main>
 
 <footer>Open XAFS Workbench · GitHub Pages · Browser-native computation</footer>
-<script src="./static/app.js?v=30"></script>
+<script src="./static/app.js?v=31"></script>
+<script src="./static/athena_display_v2.js?v=1"></script>
 </body>
 </html>
