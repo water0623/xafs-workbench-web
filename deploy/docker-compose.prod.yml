@@ -1,0 +1,23 @@
+services:
+  xafs-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    container_name: xafs-api
+    restart: always
+    expose:
+      - "8000"
+    volumes:
+      - ../data:/app/data
+
+  xafs-web:
+    image: nginx:alpine
+    container_name: xafs-web
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ../static:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - xafs-api

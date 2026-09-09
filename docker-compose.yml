@@ -1,0 +1,23 @@
+services:
+  xafs-workbench:
+    build: .
+    container_name: xafs-workbench
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./projects:/app/projects
+
+  nginx:
+    image: nginx:latest
+    container_name: xafs-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./static:/usr/share/nginx/html/static:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - xafs-workbench

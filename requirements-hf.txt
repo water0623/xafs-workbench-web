@@ -1,9 +1,9 @@
 fastapi
 uvicorn
-python-multipart
 numpy
 scipy
 lmfit
 scikit-learn
-xraydb
-pytest
+python-multipart
+pandas
+plotly
