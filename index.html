@@ -3,28 +3,17 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open XAFS Workbench</title>
-<link rel="stylesheet" href="./static/style.css?v=33">
-<link rel="stylesheet" href="./static/professional_ui.css?v=2">
+<link rel="stylesheet" href="./static/style.css?v=34">
+<link rel="stylesheet" href="./static/professional_ui.css?v=3">
 </head>
 <body>
 <header class="topbar"><div><p class="eyebrow">HARD X-RAY ANALYSIS</p><h1>Open XAFS Workbench</h1><p class="subtitle">Athena · Artemis · FEFF · XANES Analysis</p></div><div class="status online"><span class="dot"></span>Browser Native · Online</div></header>
 <nav class="tabs"><button class="tab active" data-tab="athena">Athena</button><button class="tab" data-tab="artemis">Artemis</button><button class="tab" data-tab="analysis">结果分析</button><button class="tab" data-tab="hephaestus">Hephaestus</button></nav>
 <main>
-<section class="card notice"><strong>XAFS Workbench升级版</strong><p>实现 Athena 风格数据处理：μ(E) → XANES → χ(k) → FT(R)。</p></section>
-<section id="athena" class="panel active"><div class="layout"><form id="process-form" class="card controls"><h2>Athena 数据处理</h2><label>上传 XAS 数据<input id="data-file" type="file" accept=".dat,.txt,.xmu,.chi,.csv"></label>
-<label>E0<input id="e0" type="number" placeholder="自动识别"></label><label><input id="auto-e0" type="checkbox" checked> 自动寻找 E0</label>
-<label>Pre-edge范围<input id="pre1" value="-150"><input id="pre2" value="-30"></label>
-<label>Normalization范围<input id="norm1" value="150"><input id="norm2" value="700"></label>
-<label>k weighting<select id="kweight"><option value="1">k¹</option><option value="2" selected>k²</option><option value="3">k³</option></select></label>
-<label>k max<input id="kmax" value="12"></label><label>R max<input id="rmax" value="6"></label>
-<button type="submit">开始 Athena 处理</button><p id="file-info">等待数据解析。</p></form>
-<div class="results"><div id="athena-message"></div><div id="athena-metrics"></div>
-<article class="card"><h3>Raw μ(E)</h3><div id="plot-energy" class="plot"></div></article>
-<article class="card"><h3>Normalized μ(E)</h3><div id="plot-normalized-energy" class="plot"></div></article>
-<article class="card"><h3>χ(k)</h3><div id="plot-k" class="plot"></div></article>
-<article class="card"><h3>FT(R)</h3><div id="plot-r" class="plot"></div></article></div></div></section>
-<section id="artemis" class="panel"><div class="card"><h2>Artemis EXAFS拟合</h2><p>FEFF路径、散射路径选择、CN/R/σ²/ΔE0参数拟合接口。</p><input type="file" id="feff-file" accept=".dat"><div id="fit-panel"></div></div></section>
-<section id="analysis" class="panel"><div class="card"><h2>结果分析</h2><div id="analysis-panel">处理后显示 XANES/EXAFS统计结果。</div></div></section>
-<section id="hephaestus" class="panel"><div class="card"><h2>Hephaestus</h2><p>标准样数据库、边能量和参考谱管理模块。</p></div></section>
+<section class="card notice"><strong>XAFS Workbench升级版</strong><p>Athena 数据处理、Artemis拟合和Hephaestus数据库界面。</p></section>
+<section id="athena" class="panel active"><div class="layout"><form id="process-form" class="card controls"><h2>Athena 数据处理</h2><label>上传 XAS 数据<input id="data-file" type="file" accept=".dat,.txt,.xmu,.chi,.csv"></label><label>E0<input id="e0" type="number"></label><label><input id="auto-e0" type="checkbox" checked> 自动寻找 E0</label><label>Pre-edge<input id="pre1" value="-150"><input id="pre2" value="-30"></label><label>Normalize<input id="norm1" value="150"><input id="norm2" value="700"></label><label>k weighting<select id="kweight"><option>1</option><option selected>2</option><option>3</option></select></label><label>kmax<input id="kmax" value="12"></label><label>Rmax<input id="rmax" value="6"></label><button type="submit">开始处理</button><p id="file-info">等待数据解析。</p></form><div class="results"><div id="athena-message"></div><div id="athena-metrics"></div><article class="card"><h3>Raw μ(E)</h3><div id="plot-energy" class="plot"></div></article><article class="card"><h3>Normalized μ(E)</h3><div id="plot-normalized-energy" class="plot"></div></article><article class="card"><h3>χ(k)</h3><div id="plot-k" class="plot"></div></article><article class="card"><h3>FT(R)</h3><div id="plot-r" class="plot"></div></article></div></div></section>
+<section id="artemis" class="panel"><div class="card"><h2>Artemis EXAFS拟合</h2><p>FEFF路径、散射路径和结构参数拟合。</p><input id="feff-file" type="file"><div id="fit-panel"></div></div></section>
+<section id="analysis" class="panel"><div class="card"><h2>结果分析</h2><div id="analysis-panel"></div></div></section>
+<section id="hephaestus" class="panel"><div class="card"><h2>Hephaestus</h2><p>XAFS标准谱数据库。</p></div></section>
 </main>
-<script src="./static/xafs_parser.js?v=3"></script><script src="./static/app.js?v=33"></script><script src="./static/ui_upgrade.js?v=2"></script></body></html>
+<script src="./static/xafs_parser.js?v=3"></script><script src="./static/app.js?v=34"></script><script src="./static/ui_upgrade.js?v=3"></script><script src="./static/workbench_bridge.js?v=1"></script></body></html>
