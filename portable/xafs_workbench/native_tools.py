@@ -17,9 +17,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .runtime_paths import executable_root, user_data_root
 
-WORKSPACE = Path(__file__).resolve().parent.parent
-LOCAL_CONFIG = WORKSPACE / "native_tools.local.json"
+
+LOCAL_CONFIGS = (
+    executable_root() / "native_tools.local.json",
+    user_data_root() / "native_tools.local.json",
+)
 _PROCESS_CACHE: tuple[float, list[dict[str, Any]]] = (0.0, [])
 _PROCESS_CACHE_LOCK = threading.Lock()
 
@@ -132,13 +136,15 @@ def _installed_candidates(name: str) -> list[Path]:
 
 
 def _local_values() -> dict[str, str]:
-    if not LOCAL_CONFIG.is_file():
-        return {}
-    try:
-        payload = json.loads(LOCAL_CONFIG.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return {str(key).lower(): str(value) for key, value in payload.items() if value}
+    for config in LOCAL_CONFIGS:
+        if not config.is_file():
+            continue
+        try:
+            payload = json.loads(config.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        return {str(key).lower(): str(value) for key, value in payload.items() if value}
+    return {}
 
 
 def discover_native_tools() -> dict[str, dict[str, Any]]:

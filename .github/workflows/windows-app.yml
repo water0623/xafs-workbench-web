@@ -1,0 +1,54 @@
+name: windows-standalone-app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Select source directory
+        shell: pwsh
+        run: |
+          $source = if (Test-Path portable/standalone_launcher.py) { 'portable' } else { '.' }
+          "XAFS_SOURCE=$source" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r "$env:XAFS_SOURCE/requirements-xafs-workbench.txt" pyinstaller
+      - name: Build desktop application
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onedir --name XAFS-Workbench `
+            --paths "$env:XAFS_SOURCE" `
+            --add-data "$env:XAFS_SOURCE/xafs_workbench/templates;xafs_workbench/templates" `
+            --add-data "$env:XAFS_SOURCE/xafs_workbench/static;xafs_workbench/static" `
+            --add-data "$env:XAFS_SOURCE/scripts/demeter_process.pl;scripts" `
+            --add-data "$env:XAFS_SOURCE/scripts/demeter_fit.pl;scripts" `
+            --collect-all xraydb `
+            "$env:XAFS_SOURCE/standalone_launcher.py"
+          Copy-Item "$env:XAFS_SOURCE/INSTALL_CN.md" dist/XAFS-Workbench/
+          Copy-Item "$env:XAFS_SOURCE/THIRD_PARTY_SOFTWARE.md" dist/XAFS-Workbench/
+          Copy-Item "$env:XAFS_SOURCE/native_tools.example.json" dist/XAFS-Workbench/
+          if (Test-Path docs) { Copy-Item docs dist/XAFS-Workbench/docs -Recurse }
+          Compress-Archive -Path dist/XAFS-Workbench -DestinationPath XAFS-Workbench-Windows-Standalone.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XAFS-Workbench-Windows-Standalone
+          path: XAFS-Workbench-Windows-Standalone.zip
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: XAFS-Workbench-Windows-Standalone.zip

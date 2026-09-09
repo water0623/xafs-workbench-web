@@ -32,6 +32,7 @@
       <div class="public-launch-actions">
         <a class="primary" href="http://127.0.0.1:8765/?source=github-pages">打开本机完整工作台</a>
         <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Windows 便携包</a>
+        <a class="primary" href="https://github.com/water0623/xafs-workbench-web/releases/latest" target="_blank" rel="noopener">下载独立桌面版 EXE</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
       <p class="hint">首次使用请解压便携包，右键运行 <code>setup_windows.ps1</code>；以后双击 <code>launch_workbench.cmd</code>。127.0.0.1 始终代表当前这台电脑，不会连接作者电脑。</p>
@@ -123,6 +124,7 @@
         </form>
 
         <div class="results">
+          <article class="card"><div class="plot-heading"><h3>本机已保存的拟合记录</h3><button id="refresh-fit-history" class="secondary" type="button">刷新记录</button></div><p class="hint">记录保存在当前电脑的用户数据目录，关闭浏览器、Codex 或重启电脑后仍可下载。</p><div id="recent-fit-list" class="message">尚无已保存记录。</div></article>
           <div id="athena-message" class="message">选择数据并运行处理。</div>
           <div class="toolbar"><button id="download-energy" class="secondary" hidden>下载归一化 CSV</button><button id="download-project" class="secondary" hidden>保存处理项目 JSON</button><button id="send-to-fit" class="secondary" hidden>传递到 Artemis 拟合</button></div>
           <div class="metrics" id="athena-metrics"></div>

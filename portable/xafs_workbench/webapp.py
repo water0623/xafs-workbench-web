@@ -24,10 +24,13 @@ from .core import config_from_mapping, read_spectrum, read_spectrum_file, serial
 from .demeter_backend import demeter_available, process_spectrum_demeter
 from .hephaestus import edge_lookup
 from .native_tools import discover_native_tools, launch_native_tool
+from .runtime_paths import resource_path, user_data_root
 
 
-WORKSPACE = Path(__file__).resolve().parent.parent
-DATA_DIR = WORKSPACE / "raw_data" / "gjw"
+BUNDLED_DATA_DIR = resource_path("raw_data", "gjw")
+USER_DATA_DIR = user_data_root() / "datasets"
+FIT_RESULT_DIR = user_data_root() / "fit-results"
+DATA_DIR = BUNDLED_DATA_DIR
 STANDARD_LIBRARY = {
     "Ir-foil": {"element": "Ir", "edge": "L3", "e0_eV": 11215.0, "label": "Ir foil 标准样"},
 }
@@ -37,6 +40,63 @@ MAX_SAVED_FITS = 12
 FEFF_RESULTS: OrderedDict[str, dict[str, Any]] = OrderedDict()
 FEFF_RESULTS_LOCK = threading.Lock()
 MAX_SAVED_FEFF = 8
+
+
+def _fit_result_path(result_id: str) -> Path:
+    safe_id = re.sub(r"[^a-f0-9]", "", result_id.lower())
+    if len(safe_id) != 32:
+        raise ValueError("无效的拟合结果编号")
+    return FIT_RESULT_DIR / f"{safe_id}.json"
+
+
+def _persist_fit_result(result_id: str, saved: dict[str, Any]) -> None:
+    FIT_RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    target = _fit_result_path(result_id)
+    temporary = target.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(saved, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(target)
+
+
+def _get_fit_result(result_id: str) -> dict[str, Any] | None:
+    with FIT_RESULTS_LOCK:
+        saved = FIT_RESULTS.get(result_id)
+    if saved is not None:
+        return saved
+    try:
+        path = _fit_result_path(result_id)
+        if not path.is_file():
+            return None
+        saved = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    with FIT_RESULTS_LOCK:
+        FIT_RESULTS[result_id] = saved
+        FIT_RESULTS.move_to_end(result_id)
+    return saved
+
+
+def _recent_fit_results() -> list[dict[str, Any]]:
+    if not FIT_RESULT_DIR.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    paths = sorted(FIT_RESULT_DIR.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)
+    for path in paths[:20]:
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        result_id = path.stem
+        rows.append({
+            "result_id": result_id,
+            "created_at": saved.get("created_at"),
+            "sample": saved.get("sample"),
+            "backend": saved.get("fit", {}).get("backend"),
+            "quality_status": saved.get("fit", {}).get("quality_status"),
+            "download_url": f"/api/artemis/results/{result_id}/download",
+            "data_download_url": f"/api/artemis/results/{result_id}/data.csv",
+            "wavelet_download_url": f"/api/artemis/results/{result_id}/wavelet.zip",
+        })
+    return rows
 
 
 def read_feff_path_summary(path: Path) -> tuple[float, float]:
@@ -375,6 +435,7 @@ def create_app() -> Flask:
                 FIT_RESULTS.move_to_end(result_id)
                 while len(FIT_RESULTS) > MAX_SAVED_FITS:
                     FIT_RESULTS.popitem(last=False)
+            _persist_fit_result(result_id, saved)
             output["result_id"] = result_id
             output["source_name"] = spec.source_name
             output["download_url"] = f"/api/artemis/results/{result_id}/download"
@@ -456,10 +517,28 @@ def create_app() -> Flask:
         except Exception as exc:
             return jsonify({"error": str(exc)}), 400
 
+    @app.route("/api/artemis/results", methods=["GET"])
+    def list_artemis_results():
+        return jsonify({"results": _recent_fit_results(), "storage_directory": str(FIT_RESULT_DIR)})
+
+    @app.route("/api/artemis/results/<result_id>", methods=["GET"])
+    def get_artemis_result(result_id: str):
+        saved = _get_fit_result(result_id)
+        if saved is None:
+            return jsonify({"error": "拟合结果不存在"}), 404
+        output = dict(saved["fit"])
+        output.update({
+            "result_id": result_id,
+            "source_name": saved.get("sample"),
+            "download_url": f"/api/artemis/results/{result_id}/download",
+            "data_download_url": f"/api/artemis/results/{result_id}/data.csv",
+            "wavelet_download_url": f"/api/artemis/results/{result_id}/wavelet.zip",
+        })
+        return jsonify(output)
+
     @app.route("/api/artemis/results/<result_id>/data.csv", methods=["GET"])
     def download_artemis_curves(result_id: str):
-        with FIT_RESULTS_LOCK:
-            saved = FIT_RESULTS.get(result_id)
+        saved = _get_fit_result(result_id)
         if saved is None:
             return jsonify({"error": "拟合结果不存在或服务已重启，请重新运行拟合"}), 404
 
@@ -483,8 +562,7 @@ def create_app() -> Flask:
 
     @app.route("/api/artemis/results/<result_id>/wavelet.zip", methods=["GET"])
     def download_artemis_wavelet(result_id: str):
-        with FIT_RESULTS_LOCK:
-            saved = FIT_RESULTS.get(result_id)
+        saved = _get_fit_result(result_id)
         if saved is None:
             return jsonify({"error": "拟合结果不存在或服务已重启，请重新运行拟合"}), 404
 
@@ -504,8 +582,7 @@ def create_app() -> Flask:
 
     @app.route("/api/artemis/results/<result_id>/download", methods=["GET"])
     def download_artemis_result(result_id: str):
-        with FIT_RESULTS_LOCK:
-            saved = FIT_RESULTS.get(result_id)
+        saved = _get_fit_result(result_id)
         if saved is None:
             return jsonify({"error": "拟合结果不存在或服务已重启，请重新运行拟合"}), 404
 

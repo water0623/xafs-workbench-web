@@ -16,10 +16,10 @@ import numpy as np
 from .core import K_ENERGY
 from .demeter_backend import _demeter_base, _runtime
 from .hama import HamaConfig, hama_morlet
+from .runtime_paths import resource_path
 
 
-WORKSPACE = Path(__file__).resolve().parent.parent
-FIT_SCRIPT = WORKSPACE / "scripts" / "demeter_fit.pl"
+FIT_SCRIPT = resource_path("scripts", "demeter_fit.pl")
 _EXPRESSION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$|^[A-Za-z0-9_+*/(). \-]+$")
 
 

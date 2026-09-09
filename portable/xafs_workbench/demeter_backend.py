@@ -13,10 +13,10 @@ import numpy as np
 
 from .core import ProcessConfig, Spectrum, _clean_spectrum
 from .native_tools import discover_native_tools
+from .runtime_paths import resource_path
 
 
-WORKSPACE = Path(__file__).resolve().parent.parent
-PROCESS_SCRIPT = WORKSPACE / "scripts" / "demeter_process.pl"
+PROCESS_SCRIPT = resource_path("scripts", "demeter_process.pl")
 
 
 def _demeter_base() -> Path:

@@ -3,6 +3,15 @@
 本发布包用于在每台 Windows 电脑上建立独立的本地运行环境。GitHub Pages
 只提供公开入口和下载，实验数据与拟合计算均在用户自己的电脑上完成。
 
+## 推荐：独立桌面版
+
+从 GitHub Releases 下载 `XAFS-Workbench-Windows-Standalone.zip`，解压后双击
+`XAFS-Workbench.exe`。桌面版自带 Python 运行时，会自动启动本地服务并打开浏览器，
+不依赖 Codex、VS Code 或系统 Python。拟合记录保存在
+`%LOCALAPPDATA%\XAFS Workbench\fit-results`，重启后仍可下载。
+
+Athena、Artemis、IFEFFIT/FEFF 和 HAMA 属于独立科研软件，仍需按官方方式安装。
+
 ## 1. 必需软件
 
 1. 安装 64 位 Python 3.11 或更新版本，并勾选 Python Launcher。

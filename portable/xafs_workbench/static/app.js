@@ -113,6 +113,17 @@ async function refreshNativeTools(){
 
 $$('.tab').forEach(b=>b.onclick=()=>{$$('.tab,.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active')});
 
+async function loadRecentFits(){
+  const root=$('#recent-fit-list');
+  if(!root)return;
+  try{
+    const data=await jsonFetch('/api/artemis/results');
+    const rows=data.results||[];
+    root.className='recent-fit-list';
+    root.innerHTML=rows.length?rows.map(row=>`<div class="recent-fit-row"><span><strong>${escapeHtml(row.sample||row.result_id)}</strong><small>${escapeHtml(row.created_at||'')} · ${escapeHtml(row.backend||'')}</small></span><span class="toolbar"><a class="secondary" href="${escapeHtml(apiUrl(row.data_download_url))}" download>数据 CSV</a><a class="secondary" href="${escapeHtml(apiUrl(row.wavelet_download_url))}" download>小波 ZIP</a><a class="primary" href="${escapeHtml(apiUrl(row.download_url))}" download>完整结果</a></span></div>`).join(''):'尚无已保存记录。';
+  }catch(err){root.className='message error';root.textContent=`读取历史记录失败：${err.message}`}
+}
+
 async function boot(){
   if(isGitHubPages&&!apiBase){
     $('#public-launch').hidden=false;
@@ -137,6 +148,7 @@ async function boot(){
   $('#reference-dataset').value=files.includes('Ir-foil')?'Ir-foil':files[0];
   $('#remembered-shift').value=rememberedShift.toFixed(2);$('#batch-energy-shift').value=rememberedShift.toFixed(2);
   $('#saved-s02').textContent=Number.isFinite(calibratedS02)?calibratedS02.toFixed(4):'尚未标定';
+  await loadRecentFits();
 }
 
 $('#save-api-base').onclick=()=>{
@@ -469,4 +481,5 @@ $('#edge-form').onsubmit=async e=>{e.preventDefault();try{const d=await jsonFetc
 
 updateFitRangeMode();
 updateWaveletBackendMode();
+$('#refresh-fit-history').onclick=loadRecentFits;
 boot().catch(err=>{message('#api-base-message',`连接失败：${err.message}`,'error');message('#athena-message','计算后端尚未连接。请在上方填写后端地址并重试。','error')});
