@@ -3,3 +3,5 @@ uvicorn
 python-multipart
 numpy
 scipy
+lmfit
+scikit-learn
