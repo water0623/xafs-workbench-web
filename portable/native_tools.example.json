@@ -1,0 +1,6 @@
+{
+  "athena": "C:\\path\\to\\dathena.bat",
+  "artemis": "C:\\path\\to\\dartemis.bat",
+  "hephaestus": "C:\\path\\to\\dhephaestus.bat",
+  "hama": "C:\\path\\to\\hamaFortran.exe"
+}

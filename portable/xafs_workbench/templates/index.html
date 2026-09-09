@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=29">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=29) }}">
 </head>
 <body>
   <header>
@@ -268,6 +268,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="./static/app.js?v=29"></script>
+  <script src="{{ url_for('static', filename='app.js', v=29) }}"></script>
 </body>
 </html>
