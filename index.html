@@ -1,21 +1,16 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Browser-native XAFS processing and FEFF-path fitting workbench">
-  <title>Open XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=31">
-  <link rel="stylesheet" href="./static/athena_display.css?v=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open XAFS Workbench</title>
+<link rel="stylesheet" href="./static/style.css?v=32">
+<link rel="stylesheet" href="./static/professional_ui.css?v=1">
 </head>
 <body>
-<!-- XAFS parser loaded before application -->
-<header class="topbar"><div><p class="eyebrow">HARD X-RAY ANALYSIS</p><h1>Open XAFS Workbench</h1><p class="subtitle">浏览器原生 XAFS 数据处理 · FEFF 路径拟合 · 无需本地后端</p></div><div class="status online"><span class="dot"></span>Browser Native · Online</div></header>
-<nav class="tabs" aria-label="Main sections"><button class="tab active" data-tab="athena">Athena</button><button class="tab" data-tab="artemis">Artemis</button><button class="tab" data-tab="analysis">结果分析</button><button class="tab" data-tab="hephaestus">Hephaestus</button></nav>
+<header class="topbar"><div><p class="eyebrow">HARD X-RAY ANALYSIS</p><h1>Open XAFS Workbench</h1><p class="subtitle">Athena · Artemis · FEFF · XANES Analysis</p></div><div class="status online"><span class="dot"></span>Browser Native · Online</div></header>
+<nav class="tabs"><button class="tab active" data-tab="athena">Athena</button><button class="tab" data-tab="artemis">Artemis</button><button class="tab" data-tab="analysis">结果分析</button><button class="tab" data-tab="hephaestus">Hephaestus</button></nav>
 <main>
-<section class="card notice"><strong>公开在线版已经脱离 localhost。</strong><p>当前版本增加 XAFS 文件自动解析框架，避免固定读取错误列。</p></section>
-<section id="athena" class="panel active"><div class="layout"><form id="process-form" class="card controls"><h2>数据与处理参数</h2><label>上传 XAS 数据<input id="data-file" type="file" accept=".dat,.txt,.xmu,.chi,.csv"></label><p id="file-info" class="hint">等待数据解析。</p><div id="column-info" class="hint"></div></form><div class="results"><div id="athena-message" class="message">请选择数据。</div><div id="athena-metrics" class="metrics"></div><div class="spectrum-stack"><article class="card"><h3>① Raw μ(E)</h3><div id="plot-raw-energy" class="plot"></div></article><article class="card"><h3>② Normalized μ(E)</h3><div id="plot-normalized-energy" class="plot"></div></article></div><article class="card"><h3>χ(k)</h3><div id="plot-k" class="plot"></div></article><article class="card"><h3>FT(R)</h3><div id="plot-r" class="plot"></div></article></div></div></section>
+<section class="card notice"><strong>XAFS Workbench升级版</strong><p>支持 μ(E) → χ(k) → FT(R) 全流程处理。</p></section>
+<section id="athena" class="panel active"><div class="layout"><form id="process-form" class="card controls"><h2>数据与处理参数</h2><label>上传 XAS 数据<input id="data-file" type="file" accept=".dat,.txt,.xmu,.chi,.csv"></label><p id="file-info">等待数据解析。</p><div id="column-info"></div></form><div class="results"><div id="athena-message"></div><div id="athena-metrics"></div><article class="card"><h3>Raw μ(E)</h3><div id="plot-energy" class="plot"></div></article><article class="card"><h3>Normalized μ(E)</h3><div id="plot-normalized-energy" class="plot"></div></article><article class="card"><h3>χ(k)</h3><div id="plot-k" class="plot"></div></article><article class="card"><h3>FT(R)</h3><div id="plot-r" class="plot"></div></article></div></div></section>
 </main>
-<footer>Open XAFS Workbench</footer>
-<script src="./static/xafs_parser.js?v=1"></script><script src="./static/app.js?v=31"></script><script src="./static/athena_display_v2.js?v=1"></script>
-</body></html>
+<script src="./static/xafs_parser.js?v=2"></script><script src="./static/app.js?v=32"></script><script src="./static/ui_upgrade.js?v=1"></script></body></html>
