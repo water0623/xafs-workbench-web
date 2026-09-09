@@ -5,3 +5,5 @@ numpy
 scipy
 lmfit
 scikit-learn
+xraydb
+pytest
