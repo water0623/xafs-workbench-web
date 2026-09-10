@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=31">
+  <link rel="stylesheet" href="./static/style.css?v=32">
 </head>
 <body>
   <header>
@@ -26,17 +26,17 @@
   <main>
     <section id="public-launch" class="card public-launch" hidden>
       <div>
-        <strong>公开网页可连接独立计算服务机</strong>
-        <p>浏览器无法在 GitHub Pages 内运行 Demeter/IFEFFIT 或 HAMA。请在一台 Windows 服务机完成安装并启动网络服务；同一网络中的其他电脑只需浏览器。</p>
+        <strong>公开网页将自动连接本机计算服务</strong>
+        <p>请先在当前 Windows 电脑启动 XAFS Workbench；网页会自动探测本机服务并读取 Athena、Artemis、Hephaestus 和 HAMA 状态。</p>
       </div>
       <div class="public-launch-actions">
         <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Windows 便携包</a>
         <a class="primary" href="https://github.com/water0623/xafs-workbench-web/releases/latest" target="_blank" rel="noopener">下载独立桌面版 EXE</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
-      <p class="hint">跨电脑使用：在装有 Demeter/IFEFFIT 的服务机运行 <code>run_xafs_workbench_network.ps1</code>，然后在其他电脑填写脚本显示的主机名地址和访问密钥。</p>
+      <p class="hint">若当前电脑尚未运行服务，请双击 <code>launch_workbench.cmd</code> 或启动独立桌面版。跨电脑时请直接打开网络服务脚本显示的主机名网址。</p>
     </section>
-    <details class="card web-connector" open>
+    <details id="manual-backend-connector" class="card web-connector" hidden>
       <summary>网页计算后端连接</summary>
       <p class="hint">本机打开时使用当前页面服务。跨电脑时填写服务机脚本显示的地址，例如 <code>http://LAB-PC:8765</code>；访问密钥只保存在当前浏览器标签会话中。</p>
       <div class="backend-connect-row">
@@ -45,12 +45,12 @@
         <button id="save-api-base" class="primary" type="button">保存并连接</button>
         <button id="use-page-api" class="secondary" type="button">使用当前页面服务</button>
       </div>
-      <p id="api-base-message" class="message"></p>
     </details>
-    <details class="card native-connector">
+    <details class="card native-connector" open>
       <summary>原生 Athena / Artemis / Hephaestus / HAMA 软件连接</summary>
       <p class="hint">安装状态与运行状态分别检测。数据处理和 FEFF 拟合固定调用本机 Demeter/IFEFFIT，不使用 XrayLarch；小波变换调用 ESRF HAMA Fortran。</p>
-      <div class="toolbar"><button id="refresh-native-tools" class="secondary" type="button">刷新运行状态</button></div>
+      <div class="toolbar"><button id="refresh-native-tools" class="secondary" type="button">重新检测本机服务与软件状态</button></div>
+      <p id="api-base-message" class="message">正在自动检测本机计算服务…</p>
       <div id="native-tool-list" class="native-tool-list"></div>
       <p id="native-tool-message" class="message"></p>
       <p class="hint">自动检测顺序：环境变量、<code>native_tools.local.json</code>、系统 PATH。配置示例见仓库中的 <code>native_tools.example.json</code>。</p>
@@ -270,6 +270,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="./static/app.js?v=31"></script>
+  <script src="./static/app.js?v=32"></script>
 </body>
 </html>

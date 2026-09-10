@@ -14,10 +14,13 @@ let calibratedS02=Number(localStorage.getItem('xafs.calibratedS02'));
 let generatedFeff=null;
 let fitHistory=[];
 let backendIsRemote=false;
+let backendConnected=false;
 const isGitHubPages=location.hostname.endsWith('.github.io');
 const queryApiBase=new URLSearchParams(location.search).get('api');
-let apiBase=normalizeApiBase(queryApiBase!==null?queryApiBase:(localStorage.getItem('xafs.apiBase')||''));
+let apiBase=normalizeApiBase(queryApiBase||'');
 let accessToken=sessionStorage.getItem('xafs.accessToken')||'';
+if(isGitHubPages&&!queryApiBase)accessToken='';
+const localApiCandidates=['http://127.0.0.1:8765','http://localhost:8765'];
 
 function normalizeApiBase(value){return String(value||'').trim().replace(/\/+$/,'')}
 function apiUrl(path){
@@ -109,7 +112,36 @@ function renderNativeTools(nativeTools){
   }).join('');
 }
 
+function renderDisconnectedNativeTools(){
+  const tools=[
+    ['Athena (Demeter)','Athena 数据处理'],
+    ['Artemis (Demeter)','FEFF/IFEFFIT 路径拟合'],
+    ['Hephaestus (Demeter)','元素与吸收边数据'],
+    ['HAMA Fortran','Morlet 小波变换'],
+  ];
+  $('#native-tool-list').innerHTML=tools.map(([label,role])=>`<article class="native-tool missing"><div><strong>${label}</strong><span>${role}</span><small>等待本机服务返回状态</small></div></article>`).join('');
+}
+
+async function detectLocalBackend(){
+  const candidates=queryApiBase?[normalizeApiBase(queryApiBase)]:localApiCandidates;
+  const failures=[];
+  for(const candidate of candidates){
+    apiBase=candidate;
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),1800);
+    try{
+      const status=await jsonFetch('/api/status',{signal:controller.signal,cache:'no-store'});
+      if(!status.native_tools)throw new Error('状态响应缺少原生软件信息');
+      localStorage.setItem('xafs.detectedApiBase',candidate);
+      return status;
+    }catch(err){failures.push(`${candidate}: ${err.name==='AbortError'?'超时':err.message}`)}
+    finally{clearTimeout(timer)}
+  }
+  apiBase='';
+  throw new Error('未检测到本机计算服务。请先启动 launch_workbench.cmd 或 XAFS Workbench 桌面版。');
+}
+
 async function refreshNativeTools(){
+  if(!backendConnected){await boot();return}
   const result=await jsonFetch('/api/native/status');renderNativeTools(result.tools||{});
   const running=Object.values(result.tools||{}).filter(tool=>tool.running);
   message('#native-tool-message',running.length?`已检测到 ${running.length} 个正在运行的原生程序：${running.map(tool=>tool.label).join('、')}`:'没有检测到正在运行的原生程序',running.length?'ok':'');
@@ -129,24 +161,20 @@ async function loadRecentFits(){
 }
 
 async function boot(){
-  if(isGitHubPages&&!apiBase){
-    $('#public-launch').hidden=false;
-    $('#use-page-api').disabled=true;
-    $('#backend-status').textContent='公开前端 · 尚未连接计算服务机';
-    $('#backend-status').classList.add('warn');
-    message('#api-base-message','请在计算服务机启动网络模式，再填写脚本显示的主机名地址和访问密钥。GitHub Pages 不能直接运行 Demeter/IFEFFIT 或 HAMA。');
-    return;
-  }
+  backendConnected=false;
+  if(isGitHubPages)$('#public-launch').hidden=false;
   $('#api-base-url').value=apiBase;
   $('#api-access-token').value=accessToken;
-  message('#api-base-message',`正在连接 ${apiBase||location.origin}…`);
-  const [status,files]=await Promise.all([jsonFetch('/api/status'),jsonFetch('/api/datasets')]);
+  message('#api-base-message',isGitHubPages?'正在自动检测本机计算服务…':`正在连接 ${apiBase||location.origin}…`);
+  const status=isGitHubPages?await detectLocalBackend():await jsonFetch('/api/status');
+  const files=await jsonFetch('/api/datasets');
+  backendConnected=true;
   const st=$('#backend-status');
   const nativeTools=status.native_tools||{},nativeReady=status.native_mode_ready;
   backendIsRemote=Boolean(status.remote_client);
   st.textContent=nativeReady?'Demeter / IFEFFIT 数据处理就绪 · XrayLarch 已禁用':'未检测到 Demeter / IFEFFIT 后端';
   st.classList.toggle('warn',!nativeReady||!status.artemis_ready);
-  message('#api-base-message',`已连接：${apiBase||location.origin} · ${status.athena_backend}`,'ok');
+  message('#api-base-message',`已自动连接本机服务：${apiBase||location.origin} · ${status.athena_backend}`,'ok');
   renderNativeTools(nativeTools);
   $$('.dataset-select').forEach(sel=>sel.innerHTML=files.map(f=>`<option>${escapeHtml(f)}</option>`).join(''));
   $('#batch-datasets').innerHTML=files.map(f=>`<option>${escapeHtml(f)}</option>`).join('');
@@ -176,8 +204,18 @@ document.addEventListener('click',async event=>{
   catch(err){message('#native-tool-message',err.message,'error')}
   finally{button.disabled=false}
 });
-$('#refresh-native-tools').onclick=()=>refreshNativeTools().catch(err=>message('#native-tool-message',err.message,'error'));
-setInterval(()=>refreshNativeTools().catch(()=>{}),5000);
+function handleBootFailure(err){
+  backendConnected=false;
+  renderDisconnectedNativeTools();
+  $('#backend-status').textContent='尚未连接本机计算服务';
+  $('#backend-status').classList.add('warn');
+  message('#api-base-message',err.message,'error');
+  message('#native-tool-message','启动本机 XAFS Workbench 后，点击“重新检测本机服务与软件状态”。');
+  message('#athena-message','计算后端尚未连接，请先启动本机 XAFS Workbench 服务。','error');
+  if(!isGitHubPages)$('#manual-backend-connector').hidden=false;
+}
+$('#refresh-native-tools').onclick=()=>refreshNativeTools().catch(handleBootFailure);
+setInterval(()=>{if(backendConnected)refreshNativeTools().catch(()=>{});else if(isGitHubPages)boot().catch(()=>{})},8000);
 
 async function runProcess(form,quiet=false){
   if(processController)processController.abort();
@@ -493,4 +531,4 @@ $('#edge-form').onsubmit=async e=>{e.preventDefault();try{const d=await jsonFetc
 updateFitRangeMode();
 updateWaveletBackendMode();
 $('#refresh-fit-history').onclick=loadRecentFits;
-boot().catch(err=>{message('#api-base-message',`连接失败：${err.message}`,'error');message('#athena-message','计算后端尚未连接。请在上方填写后端地址并重试。','error')});
+boot().catch(handleBootFailure);
