@@ -127,7 +127,7 @@ async function detectLocalBackend(){
   const failures=[];
   for(const candidate of candidates){
     apiBase=candidate;
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),1800);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
     try{
       const status=await jsonFetch('/api/status',{signal:controller.signal,cache:'no-store'});
       if(!status.native_tools)throw new Error('状态响应缺少原生软件信息');
@@ -137,7 +137,7 @@ async function detectLocalBackend(){
     finally{clearTimeout(timer)}
   }
   apiBase='';
-  throw new Error('未检测到本机计算服务。请先启动 launch_workbench.cmd 或 XAFS Workbench 桌面版。');
+  throw new Error('未检测到本机计算服务。请先启动 launch_workbench.cmd；若浏览器询问是否允许访问本地网络，请选择“允许”。');
 }
 
 async function refreshNativeTools(){
@@ -215,7 +215,7 @@ function handleBootFailure(err){
   if(!isGitHubPages)$('#manual-backend-connector').hidden=false;
 }
 $('#refresh-native-tools').onclick=()=>refreshNativeTools().catch(handleBootFailure);
-setInterval(()=>{if(backendConnected)refreshNativeTools().catch(()=>{});else if(isGitHubPages)boot().catch(()=>{})},8000);
+setInterval(()=>{if(backendConnected)refreshNativeTools().catch(()=>{})},8000);
 
 async function runProcess(form,quiet=false){
   if(processController)processController.abort();
