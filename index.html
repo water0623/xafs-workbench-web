@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=32">
+  <link rel="stylesheet" href="./static/style.css?v=33">
 </head>
 <body>
   <header>
@@ -26,15 +26,16 @@
   <main>
     <section id="public-launch" class="card public-launch" hidden>
       <div>
-        <strong>公开网页将自动连接本机计算服务</strong>
-        <p>请先在当前 Windows 电脑启动 XAFS Workbench；网页会自动探测本机服务并读取 Athena、Artemis、Hephaestus 和 HAMA 状态。</p>
+        <strong>原生计算请进入本机或局域网工作台</strong>
+        <p>浏览器会阻止 HTTPS 公开页在后台读取本机服务。请先启动 XAFS Workbench，再用下面的按钮直接进入本机工作台；软件状态和全部处理功能会在该页面自动显示。</p>
       </div>
       <div class="public-launch-actions">
+        <a id="open-local-workbench" class="primary" href="http://127.0.0.1:8765/">打开本机工作台</a>
         <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Windows 便携包</a>
-        <a class="primary" href="https://github.com/water0623/xafs-workbench-web/releases/latest" target="_blank" rel="noopener">下载独立桌面版 EXE</a>
+        <a class="secondary" href="https://github.com/water0623/xafs-workbench-web/releases/latest" target="_blank" rel="noopener">下载独立桌面版 EXE</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
-      <p class="hint">若当前电脑尚未运行服务，请双击 <code>launch_workbench.cmd</code> 或启动独立桌面版。跨电脑时请直接打开网络服务脚本显示的主机名网址。</p>
+      <p class="hint">若按钮打不开，请先双击 <code>launch_workbench.cmd</code> 或启动独立桌面版。跨电脑使用时，请在服务机运行 <code>launch_network_workbench.cmd</code>，然后直接打开脚本显示的主机名网址，例如 <code>http://LAB-PC:8765</code>。</p>
     </section>
     <details id="manual-backend-connector" class="card web-connector" hidden>
       <summary>网页计算后端连接</summary>
@@ -50,7 +51,7 @@
       <summary>原生 Athena / Artemis / Hephaestus / HAMA 软件连接</summary>
       <p class="hint">安装状态与运行状态分别检测。数据处理和 FEFF 拟合固定调用本机 Demeter/IFEFFIT，不使用 XrayLarch；小波变换调用 ESRF HAMA Fortran。</p>
       <div class="toolbar"><button id="refresh-native-tools" class="secondary" type="button">重新检测本机服务与软件状态</button></div>
-      <p id="api-base-message" class="message">正在自动检测本机计算服务…</p>
+      <p id="api-base-message" class="message">正在连接计算服务…</p>
       <div id="native-tool-list" class="native-tool-list"></div>
       <p id="native-tool-message" class="message"></p>
       <p class="hint">自动检测顺序：环境变量、<code>native_tools.local.json</code>、系统 PATH。配置示例见仓库中的 <code>native_tools.example.json</code>。</p>
@@ -270,6 +271,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="./static/app.js?v=32"></script>
+  <script src="./static/app.js?v=33"></script>
 </body>
 </html>
