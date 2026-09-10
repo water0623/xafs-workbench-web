@@ -5,17 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Browser-native XAFS processing and FEFF-path fitting workbench">
   <title>Open XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=31">
-  <link rel="stylesheet" href="./static/athena_display.css?v=1">
+  <link rel="stylesheet" href="./static/style.css?v=32">
+  <link rel="stylesheet" href="./static/athena_display.css?v=2">
 </head>
 <body>
-<!-- XAFS parser loaded before application -->
-<header class="topbar"><div><p class="eyebrow">HARD X-RAY ANALYSIS</p><h1>Open XAFS Workbench</h1><p class="subtitle">浏览器原生 XAFS 数据处理 · FEFF 路径拟合 · 无需本地后端</p></div><div class="status online"><span class="dot"></span>Browser Native · Online</div></header>
+<header class="topbar">
+  <div><p class="eyebrow">HARD X-RAY ANALYSIS</p><h1>Open XAFS Workbench</h1><p class="subtitle">浏览器原生 XAFS 数据处理 · FEFF 路径拟合 · 无需本地后端</p></div>
+  <div class="status online"><span class="dot"></span>Browser Native · Online</div>
+</header>
 <nav class="tabs" aria-label="Main sections"><button class="tab active" data-tab="athena">Athena</button><button class="tab" data-tab="artemis">Artemis</button><button class="tab" data-tab="analysis">结果分析</button><button class="tab" data-tab="hephaestus">Hephaestus</button></nav>
 <main>
-<section class="card notice"><strong>公开在线版已经脱离 localhost。</strong><p>当前版本增加 XAFS 文件自动解析框架，避免固定读取错误列。</p></section>
-<section id="athena" class="panel active"><div class="layout"><form id="process-form" class="card controls"><h2>数据与处理参数</h2><label>上传 XAS 数据<input id="data-file" type="file" accept=".dat,.txt,.xmu,.chi,.csv"></label><p id="file-info" class="hint">等待数据解析。</p><div id="column-info" class="hint"></div></form><div class="results"><div id="athena-message" class="message">请选择数据。</div><div id="athena-metrics" class="metrics"></div><div class="spectrum-stack"><article class="card"><h3>① Raw μ(E)</h3><div id="plot-raw-energy" class="plot"></div></article><article class="card"><h3>② Normalized μ(E)</h3><div id="plot-normalized-energy" class="plot"></div></article></div><article class="card"><h3>χ(k)</h3><div id="plot-k" class="plot"></div></article><article class="card"><h3>FT(R)</h3><div id="plot-r" class="plot"></div></article></div></div></section>
+  <section class="card notice">
+    <div><strong>公开在线版已经脱离 localhost，并恢复 Athena 数据处理控制。</strong><p>数据只在当前浏览器中计算，不上传到作者电脑。自动列识别后仍可手动调整信号列、峰位、处理区间和变换参数。</p></div>
+    <div class="badge-row"><span class="badge">No localhost</span><span class="badge">No server upload</span><span class="badge">Client-side compute</span></div>
+  </section>
+
+  <section id="athena" class="panel active">
+    <div class="layout">
+      <form id="process-form" class="card controls">
+        <h2>数据与处理参数</h2>
+        <label>上传 XAS 数据<input id="data-file" type="file" accept=".dat,.txt,.xmu,.chi,.csv,.xdi"></label>
+        <p id="file-info" class="hint">支持 XDI、空格、Tab 或 CSV 数值列。</p>
+        <div id="column-info" class="message">选择文件后自动识别能量与信号列。</div>
+
+        <details open><summary>数据列与信号模式</summary><div class="grid two details-body">
+          <label>信号模式<select id="signal-mode"><option value="auto">自动识别</option><option value="direct">直接 μ(E)</option><option value="transmission">透射 ln(I0/It)</option><option value="fluorescence">荧光 If/I0</option></select></label>
+          <label>能量列（从 0 开始）<input id="energy-column" type="number" value="0" min="0"></label>
+          <label>直接信号列<input id="signal-column" type="number" value="1" min="0"></label>
+          <label>I0 列<input id="i0-column" type="number" value="1" min="0"></label>
+          <label>It / If 列<input id="it-if-column" type="number" value="2" min="0"></label>
+        </div></details>
+
+        <div class="divider"></div>
+        <details class="calibration-panel" open><summary>峰位与能量校正</summary><div class="details-body">
+          <label>参考标准谱（可选）<input id="reference-file" type="file" accept=".dat,.txt,.xmu,.csv,.xdi"></label>
+          <p id="reference-info" class="hint">可上传同时测量的标准箔；也可直接填写参考峰位置。</p>
+          <div class="grid two">
+            <label>样品峰位置 (eV)<input id="sample-peak" type="number" step="0.01" placeholder="自动寻找"></label>
+            <label>参考峰位置 (eV)<input id="reference-peak" type="number" step="0.01" placeholder="标准谱自动寻找或手填"></label>
+            <label>能量校准 ΔE (eV)<input id="energy-shift" type="number" value="0" step="0.01"></label>
+            <label>E₀ (eV)<input id="e0" type="number" value="0" step="0.01"></label>
+          </div>
+          <label class="check"><input id="auto-e0" type="checkbox" checked> 自动寻找 E₀（一阶导数峰）</label>
+          <div class="toolbar"><button id="find-sample-peak" class="secondary" type="button">寻找样品峰</button><button id="apply-peak-alignment" class="secondary" type="button">计算并应用峰位移</button><button id="clear-energy-shift" class="secondary" type="button">清除位移</button></div>
+          <div id="alignment-message" class="message">上传样品后可自动寻找峰位。</div>
+        </div></details>
+
+        <div class="divider"></div>
+        <details open><summary>截取、清理与归一化范围</summary><div class="grid two details-body">
+          <label>能量下限 (eV)<input id="energy-min" type="number" step="0.1" placeholder="留空不截取"></label>
+          <label>能量上限 (eV)<input id="energy-max" type="number" step="0.1" placeholder="留空不截取"></label>
+          <label>自动去毛刺 σ<input id="deglitch-sigma" type="number" value="0" min="0" step="0.5"></label>
+          <label>手动排除区间<input id="exclude-ranges" placeholder="例如 11230-11232, 11405-11406"></label>
+          <label>Pre 1 (相对 E₀, eV)<input id="pre1" type="number" value="-150"></label>
+          <label>Pre 2 (相对 E₀, eV)<input id="pre2" type="number" value="-30"></label>
+          <label>Norm 1 (相对 E₀, eV)<input id="norm1" type="number" value="150"></label>
+          <label>Norm 2 (相对 E₀, eV)<input id="norm2" type="number" value="700"></label>
+        </div></details>
+
+        <div class="divider"></div>
+        <details open><summary>AUTOBK 近似与傅里叶变换</summary><div class="grid two details-body">
+          <label>Rbkg 等效平滑尺度 (Å)<input id="rbkg" type="number" value="1.0" step="0.05" min="0.2"></label>
+          <label>k-weight<select id="kweight"><option>1</option><option selected>2</option><option>3</option></select></label>
+          <label>kmin (Å⁻¹)<input id="kmin" type="number" value="3" step="0.1" min="0"></label>
+          <label>kmax (Å⁻¹)<input id="kmax" type="number" value="12" step="0.1" min="0"></label>
+          <label>窗口边宽 dk<input id="dk" type="number" value="1" step="0.1" min="0"></label>
+          <label>FT 窗口<select id="ft-window"><option value="kaiser" selected>Kaiser–Bessel</option><option value="hanning">Hanning</option></select></label>
+          <label>R 图上限 (Å)<input id="rmax" type="number" value="6" step="0.5" min="2" max="15"></label>
+        </div></details>
+        <button class="primary full-width" type="submit">处理数据</button>
+        <p class="hint">浏览器版用于在线快速处理；背景去除为 AUTOBK 风格近似。正式发表前建议使用 Athena/Demeter 复核关键参数。</p>
+      </form>
+
+      <div class="results">
+        <div id="athena-message" class="message">请选择数据并点击“处理数据”。</div><div id="athena-metrics" class="metrics"></div>
+        <article class="card"><h3>① 原始数据：Raw μ(E)</h3><p class="plot-note"><span class="raw-tag">RAW</span> 用于检查信号、峰位和截取范围。</p><div id="plot-raw-energy" class="plot"></div></article>
+        <article class="card"><h3>② 归一化数据：Normalized μ(E)</h3><p class="plot-note"><span class="norm-tag">NORMALIZED</span> Pre-edge 扣除和 edge-step 归一化结果。</p><div id="plot-normalized-energy" class="plot"></div></article>
+        <article class="card"><h3>③ 归一化谱一阶导数</h3><div id="plot-derivative" class="plot"></div></article>
+        <article class="card"><h3>④ k 空间：k<sup>w</sup>χ(k)</h3><div id="plot-k" class="plot"></div></article>
+        <article class="card"><h3>⑤ R 空间：χ(R)</h3><div class="plot-options"><label class="check"><input id="show-r-mag" type="checkbox" checked>幅值</label><label class="check"><input id="show-r-real" type="checkbox">实部</label><label class="check"><input id="show-r-imag" type="checkbox">虚部</label></div><div id="plot-r" class="plot"></div></article>
+      </div>
+    </div>
+  </section>
+
+  <section id="artemis" class="panel"><div class="layout">
+    <form id="fit-form" class="card controls"><h2>FEFF 路径拟合</h2><p id="fit-source" class="hint">先在 Athena 页处理实验数据，再上传 FEFF 路径文件。</p><label>S₀²（固定）<input id="s02" type="number" value="0.90" min="0" max="1.5" step="0.01"></label>
+      <fieldset><legend>Path 1 / 第一配位层</legend><label>FEFF 路径文件<input id="feff1" type="file" accept=".dat,.txt"></label><div id="feff1-info" class="hint">自动识别 Reff、deg 与路径数组。</div><div class="grid three"><label>CN<input id="n1" type="number" value="4" min="0" max="30" step="0.1"></label><label>ΔR (Å)<input id="dr1" type="number" value="0" min="-0.5" max="0.5" step="0.001"></label><label>σ² (Å²)<input id="sig1" type="number" value="0.005" min="0.0001" max="0.03" step="0.0001"></label></div></fieldset>
+      <fieldset><legend>Path 2 / 第二配位层（可选）</legend><label>FEFF 路径文件<input id="feff2" type="file" accept=".dat,.txt"></label><div id="feff2-info" class="hint">不上传则只拟合第一配位层。</div><div class="grid three"><label>CN<input id="n2" type="number" value="4" min="0" max="30" step="0.1"></label><label>ΔR (Å)<input id="dr2" type="number" value="0" min="-0.5" max="0.5" step="0.001"></label><label>σ² (Å²)<input id="sig2" type="number" value="0.006" min="0.0001" max="0.03" step="0.0001"></label></div></fieldset>
+      <div class="grid two"><label>ΔE₀ (eV)<input id="de0" type="number" value="0" min="-20" max="20" step="0.1"></label><label>迭代轮数<input id="fit-iterations" type="number" value="9" min="3" max="15"></label></div><button class="primary full-width" type="submit">开始 FEFF 路径拟合</button><p class="hint">浏览器拟合适合快速检查；正式发表前建议与 Artemis/IFEFFIT 交叉验证。</p>
+    </form>
+    <div class="results"><div id="fit-message" class="message">等待实验 χ(k) 与 FEFF 路径。</div><div id="fit-metrics" class="metrics"></div><article class="card"><h3>k 空间拟合</h3><div id="plot-fit-k" class="plot"></div></article><article class="card"><h3>R 空间拟合</h3><div id="plot-fit-r" class="plot"></div></article><article class="card"><h3>拟合参数</h3><div id="fit-table"></div></article></div>
+  </div></section>
+
+  <section id="analysis" class="panel"><div class="card"><div class="plot-heading"><div><h2>结果分析与导出</h2><p class="hint">处理和拟合结果仅保留在当前浏览器内存中。</p></div><div class="toolbar"><button id="download-processed" class="secondary" type="button">下载处理数据 CSV</button><button id="download-fit" class="secondary" type="button">下载拟合曲线 CSV</button><button id="download-report" class="primary" type="button">下载项目 JSON</button></div></div><div id="analysis-summary" class="analysis-summary"></div></div></section>
+  <section id="hephaestus" class="panel"><div class="card"><h2>Hephaestus 快速边能量参考</h2><div class="grid three"><label>元素<select id="element-select"><option>Cr</option><option>Mn</option><option>Fe</option><option>Co</option><option>Ni</option><option>Cu</option><option>Mo</option><option>Ru</option><option selected>Ir</option><option>Pt</option></select></label><label>吸收边<select id="edge-select"><option>K</option><option selected>L3</option></select></label><label>参考能量 (eV)<input id="edge-energy" readonly></label></div><p class="hint">精确实验标定仍应使用同步测量的标准样品。</p></div></section>
 </main>
-<footer>Open XAFS Workbench</footer>
-<script src="./static/xafs_parser.js?v=1"></script><script src="./static/app.js?v=31"></script><script src="./static/athena_display_v2.js?v=1"></script>
-</body></html>
+<footer>Open XAFS Workbench · GitHub Pages · Browser-native computation</footer>
+<script src="./static/xafs_parser.js?v=2"></script>
+<script src="./static/athena_advanced.js?v=2"></script>
+<script src="./static/app.js?v=32"></script>
+<script src="./static/athena_display_v2.js?v=2"></script>
+</body>
+</html>

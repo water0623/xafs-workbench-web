@@ -1,8 +1,9 @@
 'use strict';
 const C_K = 3.80998212;
-const state = { raw:null, processed:null, fit:null, feff:[null,null] };
+const state = { raw:null, reference:null, processed:null, fit:null, feff:[null,null] };
 const $ = id => document.getElementById(id);
 const num = (id, d=0) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : d; };
+const optionalNum = id => { const value=$(id).value.trim(); if(value==='')return null; const parsed=Number(value); return Number.isFinite(parsed)?parsed:null; };
 
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===btn));
@@ -11,23 +12,46 @@ document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>
 }));
 
 function parseNumericText(text){
-  const rows=[];
+  const rows=[], columns=[]; let plainHeader=[];
   for(const line0 of text.split(/\r?\n/)){
     const line=line0.trim();
-    if(!line || /^[#;!*]/.test(line)) continue;
+    if(!line)continue;
+    const columnMatch=line.match(/^#\s*Column\.(\d+)\s*:\s*([^\s,]+)/i);
+    if(columnMatch){columns[Number(columnMatch[1])-1]=columnMatch[2];continue;}
+    if(/^[#;!*]/.test(line))continue;
     const parts=line.replace(/,/g,' ').split(/\s+/).map(Number);
-    if(parts.length>=2 && parts.every(Number.isFinite)) rows.push(parts);
+    if(parts.length>=2 && parts.every(Number.isFinite))rows.push(parts);
+    else if(!rows.length)plainHeader=line.replace(/,/g,' ').split(/\s+/);
   }
   if(rows.length<8) throw new Error('可识别的数值行不足 8 行。');
   const ncol=Math.min(...rows.map(r=>r.length));
-  return rows.map(r=>r.slice(0,ncol));
+  return {rows:rows.map(r=>r.slice(0,ncol)),header:(columns.length?columns:plainHeader).slice(0,ncol)};
 }
 
 $('data-file').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
-  try{ const rows=parseNumericText(await f.text()); state.raw={name:f.name,rows}; $('file-info').textContent=`${f.name} · ${rows.length} 行 · ${rows[0].length} 列`; }
-  catch(err){ $('file-info').textContent=err.message; }
+  try{
+    const parsed=parseNumericText(await f.text()),mapping=window.XAFSParser?.detect(parsed.rows,parsed.header)||{energy:0,mu:null,norm:null,i0:null,it:null,columns:parsed.rows[0].length};
+    state.raw={name:f.name,...parsed,mapping};applyDetectedColumns(mapping);
+    $('file-info').textContent=`${f.name} · ${parsed.rows.length} 行 · ${parsed.rows[0].length} 列`;
+    $('column-info').textContent=`自动识别：能量列 ${mapping.energy}${mapping.mu!==null?`，μ 列 ${mapping.mu}`:''}${mapping.norm!==null?`，norm 列 ${mapping.norm}`:''}${mapping.i0!==null?`，I0 列 ${mapping.i0}`:''}${mapping.it!==null?`，It 列 ${mapping.it}`:''}。可在下方手动修改。`;
+    const signal=signalFromRaw(state.raw,false,0),peak=findDerivativePeak(signal.E,signal.mu);$('sample-peak').value=peak.toFixed(2);$('e0').value=peak.toFixed(2);
+    setMsg('alignment-message',`已自动找到样品一阶导数峰 ${peak.toFixed(2)} eV。`,'ok');
+  }catch(err){$('file-info').textContent=err.message;setMsg('athena-message',err.message,'error');}
 });
+
+$('reference-file').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f){state.reference=null;return;}
+  try{const parsed=parseNumericText(await f.text()),mapping=window.XAFSParser?.detect(parsed.rows,parsed.header)||{energy:0,mu:null,norm:null,i0:null,it:null,columns:parsed.rows[0].length};state.reference={name:f.name,...parsed,mapping};const signal=signalFromRaw(state.reference,false,0),peak=findDerivativePeak(signal.E,signal.mu);$('reference-peak').value=peak.toFixed(2);$('reference-info').textContent=`${f.name} · 自动峰位 ${peak.toFixed(2)} eV`;}
+  catch(err){$('reference-info').textContent=err.message;}
+});
+
+function applyDetectedColumns(mapping){
+  $('energy-column').value=mapping.energy??0;
+  if(mapping.mu!==null||mapping.norm!==null){$('signal-mode').value='direct';$('signal-column').value=mapping.mu??mapping.norm;}
+  else if(mapping.i0!==null&&mapping.it!==null){$('signal-mode').value='transmission';$('i0-column').value=mapping.i0;$('it-if-column').value=mapping.it;}
+  else $('signal-mode').value='auto';
+}
 
 function linfit(x,y){
   const n=x.length, sx=x.reduce((a,b)=>a+b,0), sy=y.reduce((a,b)=>a+b,0), sxx=x.reduce((a,b)=>a+b*b,0), sxy=x.reduce((a,b,i)=>a+b*y[i],0);
@@ -52,21 +76,30 @@ function interp1(x,y,xq){
 function derivative(x,y){
   return y.map((_,i)=>{if(i===0)return (y[1]-y[0])/(x[1]-x[0]);if(i===y.length-1)return (y[i]-y[i-1])/(x[i]-x[i-1]);return (y[i+1]-y[i-1])/(x[i+1]-x[i-1]);});
 }
-function chooseSignal(rows){
-  const ec=Math.round(num('energy-column',0)), sc=Math.round(num('signal-column',1)), i0c=Math.round(num('i0-column',1)), ic=Math.round(num('it-if-column',2));
-  const mode=$('signal-mode').value, E=[], mu=[];
-  for(const r of rows){ if(ec>=r.length)continue; const e=r[ec]+num('energy-shift',0); let m;
-    const actual=mode==='auto' ? (r.length>=3?'transmission':'direct') : mode;
+function signalFromRaw(raw,useControls=true,shift=0){
+  const mapping=raw.mapping||{},ec=useControls?Math.round(num('energy-column',0)):(mapping.energy??0),sc=useControls?Math.round(num('signal-column',1)):(mapping.mu??mapping.norm??1),i0c=useControls?Math.round(num('i0-column',1)):(mapping.i0??1),ic=useControls?Math.round(num('it-if-column',2)):(mapping.it??2);
+  let mode=useControls?$('signal-mode').value:((mapping.mu!==null||mapping.norm!==null)?'direct':(mapping.i0!==null&&mapping.it!==null?'transmission':'auto'));const E=[],mu=[];
+  for(const r of raw.rows){if(ec>=r.length)continue;const e=r[ec]+shift;let m;
+    const actual=mode==='auto'?(r.length>=3?'transmission':'direct'):mode;
     if(actual==='direct'){if(sc>=r.length)continue;m=r[sc];}
     else if(actual==='transmission'){if(i0c>=r.length||ic>=r.length||r[i0c]<=0||r[ic]<=0)continue;m=Math.log(r[i0c]/r[ic]);}
     else {if(i0c>=r.length||ic>=r.length||r[i0c]===0)continue;m=r[ic]/r[i0c];}
     if(Number.isFinite(e)&&Number.isFinite(m)){E.push(e);mu.push(m);}
   }
-  const zipped=E.map((e,i)=>[e,mu[i]]).sort((a,b)=>a[0]-b[0]); return {E:zipped.map(z=>z[0]),mu:zipped.map(z=>z[1])};
+  const zipped=E.map((energy,i)=>[energy,mu[i]]).sort((a,b)=>a[0]-b[0]);return {E:zipped.map(z=>z[0]),mu:zipped.map(z=>z[1])};
+}
+function parseExcludedRanges(text){const ranges=[];for(const match of String(text||'').matchAll(/(-?\d+(?:\.\d+)?)\s*(?:-|:|~)\s*(-?\d+(?:\.\d+)?)/g)){const a=Number(match[1]),b=Number(match[2]);ranges.push([Math.min(a,b),Math.max(a,b)]);}return ranges;}
+function cleanGlitches(mu,sigma){if(!(sigma>0)||mu.length<9)return {values:mu,removed:0};const baseline=movingAverage(mu,5),residual=mu.map((v,i)=>Math.abs(v-baseline[i])).sort((a,b)=>a-b),median=residual[Math.floor(residual.length/2)],limit=sigma*1.4826*Math.max(median,1e-12),values=[...mu];let removed=0;for(let i=2;i<mu.length-2;i++){if(Math.abs(mu[i]-baseline[i])>limit){values[i]=(mu[i-1]+mu[i+1])/2;removed++;}}return {values,removed};}
+function chooseSignal(){
+  const raw=signalFromRaw(state.raw,true,num('energy-shift',0)),emin=optionalNum('energy-min'),emax=optionalNum('energy-max');if(emin!==null&&emax!==null&&emin>=emax)throw new Error('能量截取必须满足下限 < 上限。');
+  const excluded=parseExcludedRanges($('exclude-ranges').value),E=[],mu=[];for(let i=0;i<raw.E.length;i++){const e=raw.E[i];if(emin!==null&&e<emin||emax!==null&&e>emax||excluded.some(([a,b])=>e>=a&&e<=b))continue;E.push(e);mu.push(raw.mu[i]);}
+  const cleaned=cleanGlitches(mu,num('deglitch-sigma',0));return {E,mu:cleaned.values,removed:raw.E.length-E.length+cleaned.removed};
+}
+function findDerivativePeak(E,mu){if(E.length<8)throw new Error('有效数据点不足，无法寻找峰位。');const smooth=movingAverage(mu,Math.max(5,Math.round(E.length/180))),d=derivative(E,smooth);let best=-Infinity,index=2;for(let i=2;i<d.length-2;i++){if(Number.isFinite(d[i])&&d[i]>best){best=d[i];index=i;}}return E[index];
 }
 function processData(){
   if(!state.raw) throw new Error('请先上传 XAS 数据。');
-  const {E,mu}=chooseSignal(state.raw.rows); if(E.length<20)throw new Error('有效数据点不足。请检查列号与信号模式。');
+  const {E,mu,removed}=chooseSignal(); if(E.length<20)throw new Error('有效数据点不足。请检查列号、信号模式和截取范围。');
   const smoothRaw=movingAverage(mu, Math.max(5,Math.round(E.length/180)));
   const dRaw=derivative(E,smoothRaw);
   let e0=num('e0',0);
@@ -89,16 +122,22 @@ function processData(){
   const rbkg=Math.max(.2,num('rbkg',1)); const smw=Math.max(5,Math.round((12/rbkg))); const slow=movingAverage(residual,smw);
   const chi=residual.map((v,i)=>v-slow[i]);
   const kWeighted=chi.map((v,i)=>v*Math.pow(k[i],kw));
-  const ft=fourierTransform(k,kWeighted,kmin,kmax,num('rmax',6));
-  state.processed={name:state.raw.name,E,mu,norm,dnorm,e0,edgeStep,k,chi,kWeighted,kw,kmin,kmax,ft,params:{pre1,pre2,norm1,norm2,rbkg}};
+  if(!(kmin>=0&&kmin<kmax))throw new Error('k 范围必须满足 0 ≤ kmin < kmax。');
+  const ft=fourierTransform(k,kWeighted,kmin,kmax,num('rmax',6),num('dk',1),$('ft-window').value);
+  state.processed={name:state.raw.name,E,mu,norm,dnorm,e0,edgeStep,k,chi,kWeighted,kw,kmin,kmax,ft,removed,params:{pre1,pre2,norm1,norm2,rbkg,dk:num('dk',1),window:$('ft-window').value,energyMin:optionalNum('energy-min'),energyMax:optionalNum('energy-max')}};
   renderProcessed();
 }
 $('process-form').addEventListener('submit',e=>{e.preventDefault();try{processData();setMsg('athena-message','处理完成。所有计算在当前浏览器内完成。','ok');}catch(err){setMsg('athena-message',err.message,'error');}});
 
-function fourierTransform(k,y,kmin,kmax,rmax){
+$('find-sample-peak').addEventListener('click',()=>{try{if(!state.raw)throw new Error('请先上传样品数据。');const signal=signalFromRaw(state.raw,true,0),peak=findDerivativePeak(signal.E,signal.mu);$('sample-peak').value=peak.toFixed(2);setMsg('alignment-message',`样品峰位：${peak.toFixed(2)} eV。`,'ok');}catch(err){setMsg('alignment-message',err.message,'error');}});
+$('apply-peak-alignment').addEventListener('click',()=>{try{if(!$('sample-peak').value)$('find-sample-peak').click();const sample=optionalNum('sample-peak'),reference=optionalNum('reference-peak');if(sample===null||reference===null)throw new Error('请提供样品峰和参考峰位置。');const shift=window.AthenaAdvanced?window.AthenaAdvanced.calibrate(sample,reference):reference-sample;$('energy-shift').value=shift.toFixed(3);$('e0').value=reference.toFixed(2);$('auto-e0').checked=false;setMsg('alignment-message',`已应用 ΔE=${shift.toFixed(3)} eV；样品峰 ${sample.toFixed(2)} → 参考峰 ${reference.toFixed(2)} eV。`,'ok');if(state.raw)processData();}catch(err){setMsg('alignment-message',err.message,'error');}});
+$('clear-energy-shift').addEventListener('click',()=>{$('energy-shift').value='0';$('auto-e0').checked=true;setMsg('alignment-message','能量位移已清除；下次处理将重新自动寻找 E₀。');});
+
+function besselI0(x){let sum=1,term=1;for(let i=1;i<18;i++){term*=x*x/(4*i*i);sum+=term;}return sum;}
+function fourierTransform(k,y,kmin,kmax,rmax,dk=1,windowType='kaiser'){
   const pairs=k.map((v,i)=>[v,y[i]]).filter(z=>z[0]>=kmin&&z[0]<=kmax); if(pairs.length<4)return {R:[],mag:[],real:[],imag:[]};
   const kk=pairs.map(z=>z[0]), yy=pairs.map(z=>z[1]); const n=kk.length;
-  const win=yy.map((v,i)=>v*0.5*(1-Math.cos(2*Math.PI*i/(n-1))));
+  const beta=6,i0beta=besselI0(beta),edgeWidth=Math.max(0,dk);const win=yy.map((v,i)=>{if(edgeWidth===0)return v;const edge=Math.min(kk[i]-kmin,kmax-kk[i]),t=Math.max(0,Math.min(1,edge/edgeWidth));const weight=windowType==='hanning'?0.5*(1-Math.cos(Math.PI*t)):besselI0(beta*Math.sqrt(Math.max(0,1-(1-t)*(1-t))))/i0beta;return v*weight;});
   const R=[],real=[],imag=[],mag=[]; const nr=300;
   for(let ir=0;ir<nr;ir++){const r=rmax*ir/(nr-1);let re=0,im=0;for(let i=0;i<n-1;i++){const dk=kk[i+1]-kk[i];const ph=2*kk[i]*r;re+=win[i]*Math.cos(ph)*dk;im+=win[i]*Math.sin(ph)*dk;}R.push(r);real.push(re);imag.push(im);mag.push(Math.hypot(re,im));}
   return {R,real,imag,mag};
