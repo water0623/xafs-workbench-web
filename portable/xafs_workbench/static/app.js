@@ -13,9 +13,14 @@ let lastMulti=null;
 let calibratedS02=Number(localStorage.getItem('xafs.calibratedS02'));
 let generatedFeff=null;
 let fitHistory=[];
+let backendIsRemote=false;
+let backendConnected=false;
 const isGitHubPages=location.hostname.endsWith('.github.io');
 const queryApiBase=new URLSearchParams(location.search).get('api');
-let apiBase=normalizeApiBase(queryApiBase!==null?queryApiBase:(isGitHubPages?'':(localStorage.getItem('xafs.apiBase')||'')));
+const publicLanding=isGitHubPages&&!queryApiBase;
+let apiBase=normalizeApiBase(queryApiBase||'');
+let accessToken=sessionStorage.getItem('xafs.accessToken')||'';
+if(isGitHubPages&&!queryApiBase)accessToken='';
 
 function normalizeApiBase(value){return String(value||'').trim().replace(/\/+$/,'')}
 function apiUrl(path){
@@ -90,7 +95,9 @@ function drawPlot(id,series,xlabel,ylabel,options={}){
   addPlotInteraction(root,root.querySelector('svg'),valid,{width:W,left:p.l,right:W-p.r,top:p.t,bottom:H-p.b,xmin,xmax,X,Y,xlabel,onPick:options.onPick});
 }
 
-async function jsonFetch(url,opts={}){const res=await fetch(apiUrl(url),opts);let data;try{data=await res.json()}catch{throw new Error(`后端返回了非 JSON 响应（HTTP ${res.status}）`)}if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);return data}
+async function apiFetch(url,opts={}){if(publicLanding)throw new Error('公开页不执行本机计算。请先启动 Windows 桌面版，再点击“打开本机工作台”。');const headers=new Headers(opts.headers||{});if(accessToken)headers.set('X-XAFS-Access-Token',accessToken);return fetch(apiUrl(url),{...opts,headers})}
+async function jsonFetch(url,opts={}){const res=await apiFetch(url,opts);let data;try{data=await res.json()}catch{throw new Error(`后端返回了非 JSON 响应（HTTP ${res.status}）`)}if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);return data}
+async function downloadFromApi(url,fallbackName='download'){const res=await apiFetch(url);if(!res.ok){let detail='';try{detail=(await res.json()).error||''}catch{}throw new Error(detail||`下载失败（HTTP ${res.status}）`)}const blob=await res.blob(),disposition=res.headers.get('Content-Disposition')||'',match=disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i),name=match?decodeURIComponent(match[1]):fallbackName;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function fitFetchWithRecovery(formData){try{return await jsonFetch('/api/artemis',{method:'POST',body:formData})}catch(err){if(!String(err.message).toLowerCase().includes('fetch'))throw err;message('#fit-message','本地服务连接瞬时中断，正在检查并自动重试一次…');await new Promise(resolve=>setTimeout(resolve,1200));await jsonFetch('/api/status');return jsonFetch('/api/artemis',{method:'POST',body:formData})}}
 
 function renderNativeTools(nativeTools){
@@ -98,14 +105,32 @@ function renderNativeTools(nativeTools){
   toolList.innerHTML=Object.values(nativeTools).map(tool=>{
     const stateClass=tool.running?'running':(tool.available?'available':'missing');
     const detail=tool.running?`正在运行 · PID ${tool.process_ids.join(', ')}`:(tool.available?`已安装 · ${tool.source}`:'尚未检测到本机程序');
-    const disabled=tool.running||!tool.available||apiIsCrossOrigin();
+    const disabled=tool.running||!tool.available||apiIsCrossOrigin()||backendIsRemote;
     const label=tool.running?'已运行':'启动';
-    const title=apiIsCrossOrigin()&&!tool.running?'远程网页不能启动本机程序；请从本地工作台启动':'';
+    const title=(apiIsCrossOrigin()||backendIsRemote)&&!tool.running?'远程客户端不能启动服务机程序；请在服务机本地启动':'';
     return `<article class="native-tool ${stateClass}"><div><strong>${escapeHtml(tool.label)}</strong><span>${escapeHtml(tool.role)}</span><small>${escapeHtml(detail)}</small></div><div class="toolbar"><a class="secondary" href="${escapeHtml(tool.homepage)}" target="_blank" rel="noopener">官方主页</a><button class="secondary native-launch" data-tool="${escapeHtml(tool.name)}" type="button" title="${escapeHtml(title)}" ${disabled?'disabled':''}>${label}</button></div></article>`;
   }).join('');
 }
 
+function renderDisconnectedNativeTools(detail='请在本机或局域网工作台中查看真实状态'){
+  const tools=[
+    ['Athena (Demeter)','Athena 数据处理'],
+    ['Artemis (Demeter)','FEFF/IFEFFIT 路径拟合'],
+    ['Hephaestus (Demeter)','元素与吸收边数据'],
+    ['HAMA Fortran','Morlet 小波变换'],
+  ];
+  $('#native-tool-list').innerHTML=tools.map(([label,role])=>`<article class="native-tool missing"><div><strong>${label}</strong><span>${role}</span><small>${escapeHtml(detail)}</small></div></article>`).join('');
+}
+
+function lockPublicInterface(){
+  $$('.panel').forEach(panel=>{
+    panel.classList.add('public-locked');
+    panel.querySelectorAll('input,select,textarea,button').forEach(control=>{control.disabled=true});
+  });
+}
+
 async function refreshNativeTools(){
+  if(!backendConnected){await boot();return}
   const result=await jsonFetch('/api/native/status');renderNativeTools(result.tools||{});
   const running=Object.values(result.tools||{}).filter(tool=>tool.running);
   message('#native-tool-message',running.length?`已检测到 ${running.length} 个正在运行的原生程序：${running.map(tool=>tool.label).join('、')}`:'没有检测到正在运行的原生程序',running.length?'ok':'');
@@ -120,26 +145,37 @@ async function loadRecentFits(){
     const data=await jsonFetch('/api/artemis/results');
     const rows=data.results||[];
     root.className='recent-fit-list';
-    root.innerHTML=rows.length?rows.map(row=>`<div class="recent-fit-row"><span><strong>${escapeHtml(row.sample||row.result_id)}</strong><small>${escapeHtml(row.created_at||'')} · ${escapeHtml(row.backend||'')}</small></span><span class="toolbar"><a class="secondary" href="${escapeHtml(apiUrl(row.data_download_url))}" download>数据 CSV</a><a class="secondary" href="${escapeHtml(apiUrl(row.wavelet_download_url))}" download>小波 ZIP</a><a class="primary" href="${escapeHtml(apiUrl(row.download_url))}" download>完整结果</a></span></div>`).join(''):'尚无已保存记录。';
+    root.innerHTML=rows.length?rows.map(row=>`<div class="recent-fit-row"><span><strong>${escapeHtml(row.sample||row.result_id)}</strong><small>${escapeHtml(row.created_at||'')} · ${escapeHtml(row.backend||'')}</small></span><span class="toolbar"><button class="secondary api-download" data-url="${escapeHtml(row.data_download_url)}" data-name="fit-data.csv" type="button">数据 CSV</button><button class="secondary api-download" data-url="${escapeHtml(row.wavelet_download_url)}" data-name="wavelet.zip" type="button">小波 ZIP</button><button class="primary api-download" data-url="${escapeHtml(row.download_url)}" data-name="fit-result.zip" type="button">完整结果</button></span></div>`).join(''):'尚无已保存记录。';
   }catch(err){root.className='message error';root.textContent=`读取历史记录失败：${err.message}`}
 }
 
 async function boot(){
-  if(isGitHubPages&&!apiBase){
-    $('#public-launch').hidden=false;
-    $('#backend-status').textContent='公开下载页 · 本机计算服务尚未启动';
+  backendConnected=false;
+  if(isGitHubPages)$('#public-launch').hidden=false;
+  $('#api-base-url').value=apiBase;
+  $('#api-access-token').value=accessToken;
+  if(publicLanding){
+    lockPublicInterface();
+    renderDisconnectedNativeTools();
+    $('#refresh-native-tools').disabled=true;
+    $('#backend-status').textContent='公开说明页 · 未连接原生计算服务';
     $('#backend-status').classList.add('warn');
-    message('#api-base-message','请先安装并启动本机工作台，再点击“打开本机完整工作台”。GitHub Pages 不能直接运行 Demeter/IFEFFIT 或 HAMA。');
+    message('#api-base-message','桌面版运行后，点击上方“打开本机工作台”即可自动读取四个程序的安装与运行状态。');
+    message('#native-tool-message','当前为公开入口：计算控件已锁定，不会向 GitHub Pages 提交实验数据。');
+    message('#athena-message','公开页不执行计算，因此不会再出现 HTTP 405。请进入本机或局域网工作台后处理数据。');
     return;
   }
-  $('#api-base-url').value=apiBase;
+  $('#refresh-native-tools').disabled=false;
   message('#api-base-message',`正在连接 ${apiBase||location.origin}…`);
-  const [status,files]=await Promise.all([jsonFetch('/api/status'),jsonFetch('/api/datasets')]);
+  const status=await jsonFetch('/api/status');
+  const files=await jsonFetch('/api/datasets');
+  backendConnected=true;
   const st=$('#backend-status');
   const nativeTools=status.native_tools||{},nativeReady=status.native_mode_ready;
+  backendIsRemote=Boolean(status.remote_client);
   st.textContent=nativeReady?'Demeter / IFEFFIT 数据处理就绪 · XrayLarch 已禁用':'未检测到 Demeter / IFEFFIT 后端';
   st.classList.toggle('warn',!nativeReady||!status.artemis_ready);
-  message('#api-base-message',`已连接：${apiBase||location.origin} · ${status.athena_backend}`,'ok');
+  message('#api-base-message',`已连接计算服务：${apiBase||location.origin} · ${status.athena_backend}`,'ok');
   renderNativeTools(nativeTools);
   $$('.dataset-select').forEach(sel=>sel.innerHTML=files.map(f=>`<option>${escapeHtml(f)}</option>`).join(''));
   $('#batch-datasets').innerHTML=files.map(f=>`<option>${escapeHtml(f)}</option>`).join('');
@@ -153,20 +189,34 @@ async function boot(){
 
 $('#save-api-base').onclick=()=>{
   apiBase=normalizeApiBase($('#api-base-url').value);
+  accessToken=$('#api-access-token').value.trim();
   localStorage.setItem('xafs.apiBase',apiBase);
+  if(accessToken)sessionStorage.setItem('xafs.accessToken',accessToken);else sessionStorage.removeItem('xafs.accessToken');
   boot().catch(err=>{message('#api-base-message',`连接失败：${err.message}`,'error');message('#athena-message','请确认后端已启动，并检查后端地址。','error')});
 };
-$('#use-local-api').onclick=()=>{$('#api-base-url').value='http://127.0.0.1:8765';$('#save-api-base').click()};
+$('#use-page-api').onclick=()=>{if(isGitHubPages){message('#api-base-message','GitHub Pages 不包含计算服务，请填写已配置 HTTPS 的后端域名。','error');return}$('#api-base-url').value=location.origin;$('#save-api-base').click()};
 
 document.addEventListener('click',async event=>{
+  const download=event.target.closest('.api-download');
+  if(download){download.disabled=true;try{await downloadFromApi(download.dataset.url,download.dataset.name)}catch(err){message('#fit-message',err.message,'error')}finally{download.disabled=false}return}
   const button=event.target.closest('.native-launch');if(!button)return;
   button.disabled=true;message('#native-tool-message',`正在启动 ${button.dataset.tool}…`);
   try{const result=await jsonFetch('/api/native/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:button.dataset.tool})});message('#native-tool-message',`${result.tool.label} 已启动。`,'ok');setTimeout(()=>refreshNativeTools().catch(()=>{}),1500)}
   catch(err){message('#native-tool-message',err.message,'error')}
   finally{button.disabled=false}
 });
-$('#refresh-native-tools').onclick=()=>refreshNativeTools().catch(err=>message('#native-tool-message',err.message,'error'));
-setInterval(()=>refreshNativeTools().catch(()=>{}),5000);
+function handleBootFailure(err){
+  backendConnected=false;
+  renderDisconnectedNativeTools();
+  $('#backend-status').textContent='尚未连接本机计算服务';
+  $('#backend-status').classList.add('warn');
+  message('#api-base-message',err.message,'error');
+  message('#native-tool-message','启动本机 XAFS Workbench 后，点击“重新检测本机服务与软件状态”。');
+  message('#athena-message','计算后端尚未连接，请先启动本机 XAFS Workbench 服务。','error');
+  if(!isGitHubPages)$('#manual-backend-connector').hidden=false;
+}
+$('#refresh-native-tools').onclick=()=>refreshNativeTools().catch(handleBootFailure);
+setInterval(()=>{if(backendConnected)refreshNativeTools().catch(()=>{})},8000);
 
 async function runProcess(form,quiet=false){
   if(processController)processController.abort();
@@ -299,7 +349,7 @@ $('#fit-form').onsubmit=async e=>{
     $('#fit-manager-decisions').innerHTML=`<div class="manager-decisions">${d.manager_decisions.map(item=>`<p>✓ ${escapeHtml(item)}</p>`).join('')}</div>`;
     $('#fit-stage-table').innerHTML=table(d.stage_history,['stage','shells','path_count','r_factor','reduced_chi_square','n_independent','n_variables','max_abs_correlation','s02','delta_e0_eV','accepted','reason'],row=>row.accepted?'assessment-ok':'assessment-danger');
     renderFitAssessment(d);refillFitInputs(d,false);applyFitReviewColors(d);renderArtemisReport(d);$('#refill-fit-values').disabled=false;
-    $('#fit-report').textContent=d.report;$('#download-fit').hidden=false;$('#download-fit-curves').hidden=false;$('#download-fit-json').hidden=false;$('#download-fit-package').hidden=false;$('#fit-download-addresses').hidden=false;$('#fit-data-url').href=apiUrl(d.data_download_url);$('#fit-wavelet-url').href=apiUrl(d.wavelet_download_url);$('#fit-package-url').href=apiUrl(d.download_url);$('#save-fitted-s02').disabled=!d.calibration_eligible;drawWaveletSet(d.wavelet);
+    $('#fit-report').textContent=d.report;$('#download-fit').hidden=false;$('#download-fit-curves').hidden=false;$('#download-fit-json').hidden=false;$('#download-fit-package').hidden=false;$('#fit-download-addresses').hidden=false;$('#fit-data-url').dataset.url=d.data_download_url;$('#fit-wavelet-url').dataset.url=d.wavelet_download_url;$('#fit-package-url').dataset.url=d.download_url;$('#save-fitted-s02').disabled=!d.calibration_eligible;drawWaveletSet(d.wavelet);
   }catch(err){showFitServerError(err.message)}
 };
 
@@ -332,7 +382,7 @@ function syncGeneratedPathSelection(applyPreset){
   return selected;
 }
 
-$('#download-feff').onclick=()=>{if(!generatedFeff?.download_url)return;const a=document.createElement('a');a.href=apiUrl(generatedFeff.download_url);a.download='';a.click()};
+$('#download-feff').onclick=()=>{if(generatedFeff?.download_url)downloadFromApi(generatedFeff.download_url,'feff-paths.zip').catch(err=>message('#feff-message',err.message,'error'))};
 
 function pathNumber(value,digits=4){return Number(value??0).toFixed(digits)}
 function renderPathEditor(settings){
@@ -467,9 +517,9 @@ $('#download-standardized-batch').onclick=async()=>{
 function table(rows,keys,classFor=null){return `<table><thead><tr>${keys.map(k=>`<th>${escapeHtml(k)}</th>`).join('')}</tr></thead><tbody>${rows.map((r,index)=>{const rowClass=classFor&&classFor.length<3?classFor(r,index):'';return `<tr class="${escapeHtml(rowClass||'')}">${keys.map(k=>{const cellClass=classFor&&classFor.length>=3?classFor(r,k,index):'';return `<td class="${escapeHtml(cellClass||'')}">${r[k]===null?'—':escapeHtml(typeof r[k]==='number'?Number(r[k]).toPrecision(6):r[k]??'')}</td>`}).join('')}</tr>`}).join('')}</tbody></table>`}
 
 $('#download-fit').onclick=()=>{if(!lastFit)return;const keys=['name','value','stderr','vary','min','max','expr'],rows=[keys.join(','),...lastFit.parameter_rows.map(r=>keys.map(k=>r[k]??'').join(',')),'','path,'+Object.keys(lastFit.paths[0]).join(','),...lastFit.paths.map(r=>'path,'+Object.keys(r).map(k=>r[k]??'').join(','))];downloadBlob('\ufeff'+rows.join('\n'),'text/csv;charset=utf-8','feffit_parameters.csv')};
-$('#download-fit-curves').onclick=()=>{if(!lastFit?.data_download_url)return;const a=document.createElement('a');a.href=apiUrl(lastFit.data_download_url);a.download='';a.click()};
+$('#download-fit-curves').onclick=()=>{if(lastFit?.data_download_url)downloadFromApi(lastFit.data_download_url,'fit-data.csv').catch(err=>message('#fit-message',err.message,'error'))};
 $('#download-fit-json').onclick=()=>{if(lastFit)downloadBlob(JSON.stringify(lastFit,null,2),'application/json','feffit_complete_result.json')};
-$('#download-fit-package').onclick=()=>{if(!lastFit?.download_url)return;const a=document.createElement('a');a.href=apiUrl(lastFit.download_url);a.download='';a.click()};
+$('#download-fit-package').onclick=()=>{if(lastFit?.download_url)downloadFromApi(lastFit.download_url,'fit-result.zip').catch(err=>message('#fit-message',err.message,'error'))};
 
 $('#download-batch').onclick=()=>{if(!lastBatch?.length)return;const keys=Object.keys(lastBatch[0]),quote=v=>`"${String(v??'').replaceAll('"','""')}"`,rows=[keys.map(quote).join(','),...lastBatch.map(r=>keys.map(k=>quote(r[k])).join(','))];const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.join('\n')],{type:'text/csv;charset=utf-8'}));a.download='xafs_batch_quality.csv';a.click();URL.revokeObjectURL(a.href)};
 
@@ -482,4 +532,4 @@ $('#edge-form').onsubmit=async e=>{e.preventDefault();try{const d=await jsonFetc
 updateFitRangeMode();
 updateWaveletBackendMode();
 $('#refresh-fit-history').onclick=loadRecentFits;
-boot().catch(err=>{message('#api-base-message',`连接失败：${err.message}`,'error');message('#athena-message','计算后端尚未连接。请在上方填写后端地址并重试。','error')});
+boot().catch(handleBootFailure);

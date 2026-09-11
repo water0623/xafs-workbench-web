@@ -17,6 +17,7 @@ let backendIsRemote=false;
 let backendConnected=false;
 const isGitHubPages=location.hostname.endsWith('.github.io');
 const queryApiBase=new URLSearchParams(location.search).get('api');
+const publicLanding=isGitHubPages&&!queryApiBase;
 let apiBase=normalizeApiBase(queryApiBase||'');
 let accessToken=sessionStorage.getItem('xafs.accessToken')||'';
 if(isGitHubPages&&!queryApiBase)accessToken='';
@@ -94,7 +95,7 @@ function drawPlot(id,series,xlabel,ylabel,options={}){
   addPlotInteraction(root,root.querySelector('svg'),valid,{width:W,left:p.l,right:W-p.r,top:p.t,bottom:H-p.b,xmin,xmax,X,Y,xlabel,onPick:options.onPick});
 }
 
-async function apiFetch(url,opts={}){const headers=new Headers(opts.headers||{});if(accessToken)headers.set('X-XAFS-Access-Token',accessToken);return fetch(apiUrl(url),{...opts,headers})}
+async function apiFetch(url,opts={}){if(publicLanding)throw new Error('公开页不执行本机计算。请先启动 Windows 桌面版，再点击“打开本机工作台”。');const headers=new Headers(opts.headers||{});if(accessToken)headers.set('X-XAFS-Access-Token',accessToken);return fetch(apiUrl(url),{...opts,headers})}
 async function jsonFetch(url,opts={}){const res=await apiFetch(url,opts);let data;try{data=await res.json()}catch{throw new Error(`后端返回了非 JSON 响应（HTTP ${res.status}）`)}if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);return data}
 async function downloadFromApi(url,fallbackName='download'){const res=await apiFetch(url);if(!res.ok){let detail='';try{detail=(await res.json()).error||''}catch{}throw new Error(detail||`下载失败（HTTP ${res.status}）`)}const blob=await res.blob(),disposition=res.headers.get('Content-Disposition')||'',match=disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i),name=match?decodeURIComponent(match[1]):fallbackName;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function fitFetchWithRecovery(formData){try{return await jsonFetch('/api/artemis',{method:'POST',body:formData})}catch(err){if(!String(err.message).toLowerCase().includes('fetch'))throw err;message('#fit-message','本地服务连接瞬时中断，正在检查并自动重试一次…');await new Promise(resolve=>setTimeout(resolve,1200));await jsonFetch('/api/status');return jsonFetch('/api/artemis',{method:'POST',body:formData})}}
@@ -121,6 +122,13 @@ function renderDisconnectedNativeTools(detail='请在本机或局域网工作台
   $('#native-tool-list').innerHTML=tools.map(([label,role])=>`<article class="native-tool missing"><div><strong>${label}</strong><span>${role}</span><small>${escapeHtml(detail)}</small></div></article>`).join('');
 }
 
+function lockPublicInterface(){
+  $$('.panel').forEach(panel=>{
+    panel.classList.add('public-locked');
+    panel.querySelectorAll('input,select,textarea,button').forEach(control=>{control.disabled=true});
+  });
+}
+
 async function refreshNativeTools(){
   if(!backendConnected){await boot();return}
   const result=await jsonFetch('/api/native/status');renderNativeTools(result.tools||{});
@@ -143,18 +151,18 @@ async function loadRecentFits(){
 
 async function boot(){
   backendConnected=false;
-  const publicLanding=isGitHubPages&&!queryApiBase;
   if(isGitHubPages)$('#public-launch').hidden=false;
   $('#api-base-url').value=apiBase;
   $('#api-access-token').value=accessToken;
   if(publicLanding){
+    lockPublicInterface();
     renderDisconnectedNativeTools();
     $('#refresh-native-tools').disabled=true;
     $('#backend-status').textContent='公开说明页 · 未连接原生计算服务';
     $('#backend-status').classList.add('warn');
-    message('#api-base-message','点击上方“打开本机工作台”后，页面将直接读取 Athena、Artemis、Hephaestus 与 HAMA 状态。');
-    message('#native-tool-message','GitHub Pages 不能直接运行或后台读取本机原生软件。');
-    message('#athena-message','请进入本机或局域网工作台后处理数据。');
+    message('#api-base-message','桌面版运行后，点击上方“打开本机工作台”即可自动读取四个程序的安装与运行状态。');
+    message('#native-tool-message','当前为公开入口：计算控件已锁定，不会向 GitHub Pages 提交实验数据。');
+    message('#athena-message','公开页不执行计算，因此不会再出现 HTTP 405。请进入本机或局域网工作台后处理数据。');
     return;
   }
   $('#refresh-native-tools').disabled=false;

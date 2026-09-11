@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=29) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=34) }}">
 </head>
 <body>
   <header>
@@ -26,31 +26,32 @@
   <main>
     <section id="public-launch" class="card public-launch" hidden>
       <div>
-        <strong>公开网页用于下载和启动；定量计算在每台电脑本地运行</strong>
-        <p>浏览器无法从 GitHub Pages 直接运行 Demeter/IFEFFIT 或 HAMA。首次使用请下载 Windows 包并完成本地安装，之后从本页打开该电脑上的完整工作台。</p>
+        <strong>启动本机工作台后自动匹配四个原生程序</strong>
+        <p>Windows 工作台启动后会自动搜索 Athena、Artemis、Hephaestus 和 HAMA，并启用下方全部数据处理功能。GitHub 公开页只提供安全入口，不会把实验数据提交到网站。</p>
       </div>
       <div class="public-launch-actions">
-        <a class="primary" href="http://127.0.0.1:8765/?source=github-pages">打开本机完整工作台</a>
-        <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Windows 便携包</a>
-        <a class="primary" href="https://github.com/water0623/xafs-workbench-web/releases/latest" target="_blank" rel="noopener">下载独立桌面版 EXE</a>
+        <a id="open-local-workbench" class="primary" href="http://127.0.0.1:8765/">打开本机工作台</a>
+        <a id="download-desktop-workbench" class="secondary" href="https://github.com/water0623/xafs-workbench-web/releases/latest/download/XAFS-Workbench-Windows-Standalone.zip">下载 Windows 桌面版（推荐）</a>
+        <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Python 便携包</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
-      <p class="hint">首次使用请解压便携包，右键运行 <code>setup_windows.ps1</code>；以后双击 <code>launch_workbench.cmd</code>。127.0.0.1 始终代表当前这台电脑，不会连接作者电脑。</p>
+      <p class="hint"><strong>首次使用：</strong>下载并解压桌面版，双击 <code>XAFS-Workbench.exe</code>；以后由它自动打开工作台并匹配四个程序。若“打开本机工作台”显示无法访问，表示桌面版尚未运行。跨电脑使用时请运行 <code>launch_network_workbench.cmd</code>，再打开脚本显示的主机名网址。</p>
     </section>
-    <details class="card web-connector" open>
+    <details id="manual-backend-connector" class="card web-connector" hidden>
       <summary>网页计算后端连接</summary>
-      <p class="hint">本地打开时留空即可。远程后端仅适用于已配置 HTTPS 与访问控制的服务器；普通用户请点击上方按钮进入本机完整工作台。</p>
+      <p class="hint">本机打开时使用当前页面服务。跨电脑时填写服务机脚本显示的地址，例如 <code>http://LAB-PC:8765</code>；访问密钥只保存在当前浏览器标签会话中。</p>
       <div class="backend-connect-row">
-        <label>后端地址<input id="api-base-url" type="url" placeholder="http://127.0.0.1:8765" spellcheck="false"></label>
+        <label>服务机地址<input id="api-base-url" type="url" placeholder="http://LAB-PC:8765" spellcheck="false"></label>
+        <label>访问密钥<input id="api-access-token" type="password" autocomplete="off" spellcheck="false"></label>
         <button id="save-api-base" class="primary" type="button">保存并连接</button>
-        <button id="use-local-api" class="secondary" type="button">使用本机后端</button>
+        <button id="use-page-api" class="secondary" type="button">使用当前页面服务</button>
       </div>
-      <p id="api-base-message" class="message"></p>
     </details>
-    <details class="card native-connector">
+    <details class="card native-connector" open>
       <summary>原生 Athena / Artemis / Hephaestus / HAMA 软件连接</summary>
       <p class="hint">安装状态与运行状态分别检测。数据处理和 FEFF 拟合固定调用本机 Demeter/IFEFFIT，不使用 XrayLarch；小波变换调用 ESRF HAMA Fortran。</p>
-      <div class="toolbar"><button id="refresh-native-tools" class="secondary" type="button">刷新运行状态</button></div>
+      <div class="toolbar"><button id="refresh-native-tools" class="secondary" type="button">重新检测本机服务与软件状态</button></div>
+      <p id="api-base-message" class="message">正在连接计算服务…</p>
       <div id="native-tool-list" class="native-tool-list"></div>
       <p id="native-tool-message" class="message"></p>
       <p class="hint">自动检测顺序：环境变量、<code>native_tools.local.json</code>、系统 PATH。配置示例见仓库中的 <code>native_tools.example.json</code>。</p>
@@ -217,7 +218,7 @@
           <article class="card"><h3>能量空间：Athena 处理结果与 FEFF 拟合投影</h3><p class="hint">显示原始 μ(E)、flattened 归一化谱、前边线和后边线；红线为 FEFF 拟合数据，仅覆盖实际 EXAFS 拟合能区。FEFF 不拟合完整 μ(E)/XANES 白线。</p><div id="plot-fit-energy" class="plot"></div><button class="secondary plot-svg-download" data-plot="plot-fit-energy" data-name="athena_energy_with_feff_fit.svg" type="button">下载能量空间图 SVG</button></article>
           <article class="card"><h3>K 空间：实验谱与拟合谱叠加</h3><div id="plot-fit" class="plot"></div><button class="secondary plot-svg-download" data-plot="plot-fit" data-name="k_space_experimental_fit.svg" type="button">下载 K 空间图 SVG</button></article>
           <article class="card"><h3>R 空间：实验谱与拟合谱叠加</h3><div id="plot-fit-r" class="plot"></div><button class="secondary plot-svg-download" data-plot="plot-fit-r" data-name="r_space_experimental_fit.svg" type="button">下载 R 空间图 SVG</button></article>
-          <article class="card"><h3>拟合参数</h3><div id="global-fit-table"></div><div id="fit-table"></div><div id="fit-download-addresses" class="toolbar" hidden><a id="fit-data-url" class="primary" href="#" download>下载原始/拟合数据 CSV</a><a id="fit-wavelet-url" class="secondary" href="#" download>下载小波数据 ZIP</a><a id="fit-package-url" class="secondary" href="#" download>下载完整结果 ZIP</a></div><div class="toolbar"><button id="download-fit-package" class="primary" hidden>下载完整拟合数据包 ZIP</button><button id="download-fit" class="secondary" hidden>下载参数 CSV</button><button id="download-fit-curves" class="secondary" hidden>下载实验/拟合数据 CSV</button><button id="download-fit-json" class="secondary" hidden>下载完整结果 JSON</button></div></article>
+          <article class="card"><h3>拟合参数</h3><div id="global-fit-table"></div><div id="fit-table"></div><div id="fit-download-addresses" class="toolbar" hidden><button id="fit-data-url" class="primary api-download" data-name="fit-data.csv" type="button">下载原始/拟合数据 CSV</button><button id="fit-wavelet-url" class="secondary api-download" data-name="wavelet.zip" type="button">下载小波数据 ZIP</button><button id="fit-package-url" class="secondary api-download" data-name="fit-result.zip" type="button">下载完整结果 ZIP</button></div><div class="toolbar"><button id="download-fit-package" class="primary" hidden>下载完整拟合数据包 ZIP</button><button id="download-fit" class="secondary" hidden>下载参数 CSV</button><button id="download-fit-curves" class="secondary" hidden>下载实验/拟合数据 CSV</button><button id="download-fit-json" class="secondary" hidden>下载完整结果 JSON</button></div></article>
           <article class="card"><h3>参数物理范围审查</h3><div class="assessment-legend"><span class="assessment-ok">● 范围内</span><span class="assessment-warning">● 建议复核</span><span class="assessment-danger">● 明显异常</span></div><div id="fit-assessment"></div><button id="refill-fit-values" class="secondary" type="button" disabled>把本次结果回填为新初值</button><p class="hint">回填后仍可手工调整初值、上下限或固定状态，再点击“运行 FEFF 拟合”。</p></article>
           <article class="card artemis-report"><h3>Artemis 风格拟合结果</h3><div id="artemis-fit-summary"></div><h4>Variables（GDS）</h4><div id="artemis-variable-table"></div><h4>Paths</h4><div id="artemis-path-table"></div><h4>论文格式路径参数表</h4><div id="paper-fit-table"></div><div id="paper-fit-notes" class="paper-notes"></div></article>
           <article class="card"><h3 id="wavelet-title">HAMA Morlet 小波变换</h3><p id="wavelet-description" class="hint">横轴 k，纵轴 R，颜色表示小波幅值；实验与拟合使用相同色标。默认 κ=10、σ=1。</p><div class="wavelet-grid"><figure><figcaption>实验数据</figcaption><canvas id="wavelet-data"></canvas></figure><figure><figcaption>拟合数据</figcaption><canvas id="wavelet-model"></canvas></figure></div></article>
@@ -270,6 +271,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="{{ url_for('static', filename='app.js', v=29) }}"></script>
+  <script src="{{ url_for('static', filename='app.js', v=34) }}"></script>
 </body>
 </html>

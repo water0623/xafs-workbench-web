@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="./static/style.css?v=33">
+  <link rel="stylesheet" href="./static/style.css?v=34">
 </head>
 <body>
   <header>
@@ -26,16 +26,16 @@
   <main>
     <section id="public-launch" class="card public-launch" hidden>
       <div>
-        <strong>原生计算请进入本机或局域网工作台</strong>
-        <p>浏览器会阻止 HTTPS 公开页在后台读取本机服务。请先启动 XAFS Workbench，再用下面的按钮直接进入本机工作台；软件状态和全部处理功能会在该页面自动显示。</p>
+        <strong>启动本机工作台后自动匹配四个原生程序</strong>
+        <p>Windows 工作台启动后会自动搜索 Athena、Artemis、Hephaestus 和 HAMA，并启用下方全部数据处理功能。GitHub 公开页只提供安全入口，不会把实验数据提交到网站。</p>
       </div>
       <div class="public-launch-actions">
         <a id="open-local-workbench" class="primary" href="http://127.0.0.1:8765/">打开本机工作台</a>
-        <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Windows 便携包</a>
-        <a class="secondary" href="https://github.com/water0623/xafs-workbench-web/releases/latest" target="_blank" rel="noopener">下载独立桌面版 EXE</a>
+        <a id="download-desktop-workbench" class="secondary" href="https://github.com/water0623/xafs-workbench-web/releases/latest/download/XAFS-Workbench-Windows-Standalone.zip">下载 Windows 桌面版（推荐）</a>
+        <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Python 便携包</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
-      <p class="hint">若按钮打不开，请先双击 <code>launch_workbench.cmd</code> 或启动独立桌面版。跨电脑使用时，请在服务机运行 <code>launch_network_workbench.cmd</code>，然后直接打开脚本显示的主机名网址，例如 <code>http://LAB-PC:8765</code>。</p>
+      <p class="hint"><strong>首次使用：</strong>下载并解压桌面版，双击 <code>XAFS-Workbench.exe</code>；以后由它自动打开工作台并匹配四个程序。若“打开本机工作台”显示无法访问，表示桌面版尚未运行。跨电脑使用时请运行 <code>launch_network_workbench.cmd</code>，再打开脚本显示的主机名网址。</p>
     </section>
     <details id="manual-backend-connector" class="card web-connector" hidden>
       <summary>网页计算后端连接</summary>
@@ -271,6 +271,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="./static/app.js?v=33"></script>
+  <script src="./static/app.js?v=34"></script>
 </body>
 </html>
