@@ -130,6 +130,45 @@ function lockPublicInterface(){
   });
 }
 
+async function detectLocalWorkbench(){
+  const candidates=['http://127.0.0.1:8765/','http://localhost:8765/'];
+  for(const base of candidates){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),1800);
+    try{
+      const response=await fetch(`${base}api/status?source=github-pages`,{cache:'no-store',mode:'cors',signal:controller.signal});
+      if(response.ok)return base;
+    }catch{}
+    finally{clearTimeout(timer)}
+  }
+  return '';
+}
+
+function bindLocalWorkbenchLauncher(){
+  const button=$('#open-local-workbench');
+  if(!button)return;
+  const defaultLabel=button.textContent;
+  button.addEventListener('click',async event=>{
+    event.preventDefault();
+    if(button.getAttribute('aria-busy')==='true')return;
+    button.setAttribute('aria-busy','true');
+    button.textContent='正在检测本机服务…';
+    message('#local-launch-message','正在检查 127.0.0.1 / localhost 的 XAFS Workbench 服务…');
+    const base=await detectLocalWorkbench();
+    button.removeAttribute('aria-busy');
+    if(base){
+      button.textContent='正在打开本机工作台…';
+      message('#local-launch-message',`已连接 ${base}，正在进入工作台。`,'ok');
+      window.location.assign(base);
+      return;
+    }
+    button.textContent='重新检测本机工作台';
+    message('#local-launch-message','未检测到本机工作台，因此没有打开空白页。请先下载并启动 XAFS-Workbench.exe，保持程序运行，再点击“重新检测本机工作台”。','error');
+    const download=$('#download-desktop-workbench');
+    if(download)download.focus();
+    setTimeout(()=>{if(button.textContent==='重新检测本机工作台')button.textContent=defaultLabel},10000);
+  });
+}
+
 async function refreshNativeTools(){
   if(!backendConnected){await boot();return}
   const result=await jsonFetch('/api/native/status');renderNativeTools(result.tools||{});
@@ -575,4 +614,5 @@ $('#edge-form').onsubmit=async e=>{e.preventDefault();try{const d=await jsonFetc
 updateFitRangeMode();
 updateWaveletBackendMode();
 $('#refresh-fit-history').onclick=loadRecentFits;
+bindLocalWorkbenchLauncher();
 boot().catch(handleBootFailure);

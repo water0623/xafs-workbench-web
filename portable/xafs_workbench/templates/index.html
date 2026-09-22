@@ -35,6 +35,7 @@
         <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Python 便携包</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
+      <p id="local-launch-message" class="message" aria-live="polite">点击后会先检测本机服务；仅在工作台已经启动时才打开，避免进入空白页。</p>
       <p class="hint"><strong>首次使用：</strong>下载并解压桌面版，双击 <code>XAFS-Workbench.exe</code>；以后由它自动打开工作台并匹配四个程序。若“打开本机工作台”显示无法访问，表示桌面版尚未运行。跨电脑使用时请运行 <code>launch_network_workbench.cmd</code>，再打开脚本显示的主机名网址。</p>
     </section>
     <details id="manual-backend-connector" class="card web-connector" hidden>
@@ -284,6 +285,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="{{ url_for('static', filename='app.js', v=35) }}"></script>
+  <script src="{{ url_for('static', filename='app.js', v=36) }}"></script>
 </body>
 </html>
