@@ -52,6 +52,32 @@ function installCoreParameterPanel(){
 }
 installCoreParameterPanel();
 
+function installSecondShellEquationPanel(){
+  const pathList=$('#path-list');if(!pathList||$('#shell2-equation-panel'))return;
+  const panel=document.createElement('section');panel.id='shell2-equation-panel';panel.className='path';
+  panel.innerHTML='<h3 style="margin:0 0 8px">第二配位层参数设置</h3><label>第二层模式<select id="shell2-mode"><option value="independent" selected>独立拟合 N₂、R₂、σ²₂</option><option value="equation">使用第一层参数方程约束</option></select></label><div id="shell2-equations" hidden><div class="grid"><label>N₂ 方程<input id="shell2-n-expr" value="N1*0.5" spellcheck="false"></label><label>R₂ 方程 (Å)<input id="shell2-r-expr" value="R1+0.5" spellcheck="false"></label><label>σ²₂ 方程 (Å²)<input id="shell2-sigma2-expr" value="sigma2_1" spellcheck="false"></label></div><p class="hint">可用变量：N1、R1、sigma2_1、S02、dE0；支持 +、−、*、/、** 和括号。R₂ 是实际距离，程序自动换算为 ΔR₂=R₂−Reff₂。</p></div>';
+  pathList.parentNode.insertBefore(panel,pathList);const mode=$('#shell2-mode'),equations=$('#shell2-equations');mode.onchange=()=>{equations.hidden=mode.value!=='equation'};
+}
+installSecondShellEquationPanel();
+
+function equationValue(expression,variables){
+  const tokens=expression.match(/\s*(\*\*|[()+\-*/]|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+\-]?\d+)?|[A-Za-z_][A-Za-z0-9_]*)\s*/g)?.map(x=>x.trim())||[];
+  if(!tokens.length||tokens.join('').replace(/\s/g,'')!==expression.replace(/\s/g,''))throw new Error(`无法解析方程：${expression}`);
+  let i=0;const primary=()=>{const t=tokens[i++];if(t==='('){const v=add();if(tokens[i++]!==')')throw new Error(`方程缺少右括号：${expression}`);return v}if(t==='+'||t==='-'){const v=primary();return t==='-'?-v:v}if(t in variables)return variables[t];const n=Number(t);if(Number.isFinite(n))return n;throw new Error(`方程包含未知变量 ${t}`)},power=()=>{let v=primary();if(tokens[i]==='**'){i++;v=v**power()}return v},multiply=()=>{let v=power();while(tokens[i]==='*'||tokens[i]==='/'){const op=tokens[i++],rhs=power();v=op==='*'?v*rhs:v/rhs}return v},add=()=>{let v=multiply();while(tokens[i]==='+'||tokens[i]==='-'){const op=tokens[i++],rhs=multiply();v=op==='+'?v+rhs:v-rhs}return v},value=add();if(i!==tokens.length||!Number.isFinite(value))throw new Error(`方程结果无效：${expression}`);return value;
+}
+function shell2EquationSettings(){return{enabled:$('#shell2-mode')?.value==='equation',n:$('#shell2-n-expr')?.value||'',r:$('#shell2-r-expr')?.value||'',sigma2:$('#shell2-sigma2-expr')?.value||''}}
+let shell2EquationCache={key:null,values:null};
+function applySecondShellEquations(active,s02,de0){
+  const settings=shell2EquationSettings();if(!settings.enabled)return;
+  const first=active.find(p=>p.shell===1&&p.nleg===2),second=active.filter(p=>p.shell===2&&p.nleg===2);if(!first)throw new Error('方程模式需要至少一条第一配位层单散射路径。');if(!second.length)throw new Error('方程模式需要至少一条第二配位层单散射路径。');
+  const variables={N1:first.cn,R1:first.reff+first.dr,sigma2_1:first.sigma2,S02:s02,dE0:de0},key=JSON.stringify([settings,variables]),values=shell2EquationCache.key===key?shell2EquationCache.values:{n:equationValue(settings.n,variables),r:equationValue(settings.r,variables),sigma2:equationValue(settings.sigma2,variables)};shell2EquationCache={key,values};
+  second.forEach(p=>{if(values.n<0||values.sigma2<0||values.r<=0)throw new Error('第二层方程必须得到 N₂≥0、σ²₂≥0、R₂>0。');p.cn=values.n;p.dr=values.r-p.reff;p.sigma2=values.sigma2});
+}
+const parameterSpecWithoutShellEquations=parameterSpec;
+parameterSpec=function(form,active){const specs=parameterSpecWithoutShellEquations(form,active);if(!shell2EquationSettings().enabled)return specs;return specs.filter(s=>!(s.path?.shell===2&&/^(cn|dr|sigma2)_/.test(s.key)))};
+const modelAtWithoutShellEquations=modelAt;
+modelAt=function(k,s02,de0,active=paths){applySecondShellEquations(active,s02,de0);return modelAtWithoutShellEquations(k,s02,de0,active)};
+
 const renderPathsWithAdvanced=renderPaths;
 renderPaths=function(){
   renderPathsWithAdvanced();
@@ -78,6 +104,7 @@ $('#fit-form').onsubmit=async event=>{
   await shellFitHandler(event);
   if(!lastResult)return;
   const rfactor=artemisLikeRFactor(lastResult);
+  const shell2=shell2EquationSettings();lastResult.fit_settings.second_shell_parameterization=shell2.enabled?{mode:'equation',N2:shell2.n,R2:shell2.r,sigma2_2:shell2.sigma2,variables:['N1','R1','sigma2_1','S02','dE0']}:{mode:'independent'};
   lastResult.statistics.r_factor=rfactor.value;
   lastResult.statistics.r_factor_percent=100*rfactor.value;
   lastResult.statistics.r_factor_details=rfactor;
