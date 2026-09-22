@@ -1,7 +1,7 @@
 # XAFS Workbench Windows 安装与启动
 
-本发布包用于在每台 Windows 电脑上建立独立的本地运行环境。GitHub Pages
-只提供公开入口和下载，实验数据与拟合计算均在用户自己的电脑上完成。
+本发布包既可在单台 Windows 电脑本地运行，也可由一台装有科研软件的计算服务机
+供同一网络内的其他电脑使用。GitHub Pages 提供前端入口，拟合计算仍由计算服务机完成。
 
 ## 推荐：独立桌面版
 
@@ -26,8 +26,7 @@ CIF 到 FEFF 辅助工具，未安装时不影响 Athena/Artemis 原生流程。
 1. 解压 `XAFS-Workbench-Windows.zip` 到只含英文或数字的目录。
 2. 右键 `setup_windows.ps1`，选择“使用 PowerShell 运行”。
 3. 脚本会创建独立的 `.venv`、安装网页后端依赖，并注册当前用户登录时自动启动。
-4. 浏览器打开 `http://127.0.0.1:8765/` 后，在“原生软件连接”中确认
-   Athena、Artemis、Hephaestus 和 HAMA 的状态。
+4. 双击 `launch_workbench.cmd` 后，在“原生软件连接”中确认 Athena、Artemis、Hephaestus 和 HAMA 的状态。
 
 如果 PowerShell 阻止脚本，可在解压目录运行：
 
@@ -37,17 +36,32 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_windows.ps1
 
 ## 3. 日常启动
 
-双击 `launch_workbench.cmd`。服务只监听本机 `127.0.0.1:8765`，关闭 Codex
-不会影响通过登录任务启动的工作台。
+双击 `launch_workbench.cmd`。此模式只供当前电脑使用，关闭 Codex不会影响通过登录任务启动的工作台。
 
-## 4. 原生软件路径
+## 4. 其他电脑通过浏览器使用
+
+在已经安装并配置好 Demeter/IFEFFIT 的计算服务机运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_xafs_workbench_network.ps1
+```
+
+脚本会显示类似 `http://LAB-PC:8765/` 的地址和随机访问密钥。保持窗口运行；其他电脑打开该地址，
+在页面顶部填入访问密钥即可。客户端电脑不需要 Python、Codex、VS Code、Demeter 或 HAMA。
+若使用独立桌面版，在计算服务机直接双击 `launch_network_workbench.cmd` 即可启动相同的网络模式。
+如无法连接，请在服务机的 Windows 防火墙中允许所用 TCP 端口。不要把该 HTTP 端口直接暴露到公网；
+跨互联网使用必须由管理员配置 HTTPS 反向代理和更完整的身份认证。
+
+## 5. 原生软件路径
 
 工具按环境变量、`native_tools.local.json`、系统 `PATH` 的顺序检测程序。
 若未自动识别，请复制 `native_tools.example.json` 为
 `native_tools.local.json`，把各项改为本机实际可执行文件路径后重新启动。
 
-## 5. 数据与拟合原则
+## 6. 数据与拟合原则
 
+- 上传数据后先点击“诊断当前数据”。没有连续异常前段时保持截取下限为空；只有诊断给出明确建议并经原始计数通道复核后，才应用建议下限。
+- `11115 eV` 只适用于此前确认异常的 Ir 数据，不得用于其他元素、其他吸收边或其他扫描。
 - 数据处理：Demeter/Athena。
 - FEFF 路径与 EXAFS 拟合：Demeter/Artemis + IFEFFIT/FEFF。
 - 小波变换：HAMA Fortran（Morlet/Cauchy）。
@@ -57,7 +71,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup_windows.ps1
 
 完整图文步骤见 `docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf`。
 
-## 6. 隐私与公开网页限制
+## 7. 隐私与公开网页限制
 
-公开网页不能直接启动访客电脑上的桌面程序。必须先在该电脑安装本地包，
-网页界面才能连接本机后端。默认情况下原始数据不会上传到 GitHub。
+公开网页不能直接启动访客电脑或服务机上的桌面程序。网络模式上传的数据会发送到你指定的计算服务机，
+不会上传到 GitHub；拟合结果保存在服务机的用户数据目录中。

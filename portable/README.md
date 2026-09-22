@@ -64,6 +64,12 @@ powershell -ExecutionPolicy Bypass -File .\install_xafs_autostart.ps1
 `xafs_workbench.local.example.ps1` 为 `xafs_workbench.local.ps1`，并填写本机
 Python 3.11+ 路径。本地配置不会进入 Git。
 
+## 数据异常诊断与截断
+
+Athena 页面提供“诊断当前数据”功能。程序先检查能量顺序、重复点、非有限值、无效计数、预边稳定性和孤立异常候选点，再给出以下结论之一：保留完整范围、建议前段截断、建议局部屏蔽，或数据不足不宜定量拟合。
+
+截断点必须来自当前扫描中的实际采集能量。`11115 eV` 仅属于此前确认存在异常的 Ir 数据，不是 Ir、L3 边或其他元素的默认值。诊断结果会写入完整 FEFFIT 结果包的 `request_and_provenance.json`。
+
 ## GitHub Pages 前端
 
 本仓库可通过 `scripts/build_pages.py` 构建同一套处理界面，公开版本发布在：

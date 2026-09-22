@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import csv
+import hmac
+import ipaddress
 import os
 import re
 import subprocess
@@ -24,6 +26,8 @@ from .core import config_from_mapping, read_spectrum, read_spectrum_file, serial
 from .demeter_backend import demeter_available, process_spectrum_demeter
 from .hephaestus import edge_lookup
 from .native_tools import discover_native_tools, launch_native_tool
+from .native_feff import generate_native_feff
+from .quality import diagnose_spectrum
 from .runtime_paths import resource_path, user_data_root
 
 
@@ -130,6 +134,32 @@ def create_app() -> Flask:
             if origin.strip()
         ),
     }
+    access_token = os.environ.get("XAFS_ACCESS_TOKEN", "").strip()
+    configured_host = os.environ.get("XAFS_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    try:
+        network_mode = not ipaddress.ip_address(configured_host).is_loopback
+    except ValueError:
+        network_mode = configured_host.lower() != "localhost"
+
+    def request_is_local() -> bool:
+        address = request.remote_addr or ""
+        try:
+            parsed = ipaddress.ip_address(address)
+            mapped = getattr(parsed, "ipv4_mapped", None)
+            if mapped is not None:
+                parsed = mapped
+            return parsed.is_loopback
+        except ValueError:
+            return False
+
+    @app.before_request
+    def require_api_access_token():
+        if request.method == "OPTIONS" or not request.path.startswith("/api/") or not access_token:
+            return None
+        supplied = request.headers.get("X-XAFS-Access-Token", "")
+        if not hmac.compare_digest(supplied, access_token):
+            return jsonify({"error": "访问密钥无效；请在‘网页计算后端连接’中填写服务机提供的密钥。"}), 401
+        return None
 
     def request_is_cross_origin() -> bool:
         origin = request.headers.get("Origin", "").rstrip("/")
@@ -142,7 +172,7 @@ def create_app() -> Flask:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Vary"] = "Origin"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-XAFS-Access-Token"
             if request.headers.get("Access-Control-Request-Private-Network") == "true":
                 response.headers["Access-Control-Allow-Private-Network"] = "true"
         return response
@@ -186,6 +216,9 @@ def create_app() -> Flask:
                 "hama_wavelet": "HAMA Fortran (ESRF)" if native["hama"]["available"] else "unavailable",
                 "native_tools": native,
                 "native_mode_ready": demeter_available(),
+                "access_control": "token" if access_token else "none",
+                "remote_client": not request_is_local(),
+                "network_mode": network_mode,
             }
         )
 
@@ -195,8 +228,8 @@ def create_app() -> Flask:
 
     @app.route("/api/native/launch", methods=["POST"])
     def native_launch():
-        if request_is_cross_origin():
-            return jsonify({"error": "为安全起见，远程网页不能启动本机原生程序；请在本地工作台中启动。"}), 403
+        if network_mode or not request_is_local() or request_is_cross_origin():
+            return jsonify({"error": "为安全起见，远程客户端不能启动服务机上的桌面程序；请在服务机本地启动。"}), 403
         try:
             name = str((request.get_json(silent=True) or {}).get("tool", "")).lower()
             return jsonify({"launched": True, "tool": launch_native_tool(name)})
@@ -217,10 +250,32 @@ def create_app() -> Flask:
         try:
             spec = spectrum_from_request()
             cfg = config_from_mapping(dict(request.form))
+            diagnosis = diagnose_spectrum(
+                spec,
+                e0_hint=None if cfg.auto_e0 else cfg.e0,
+                pre2=cfg.pre2,
+                norm1=cfg.norm1,
+            )
             result = process_spectrum_demeter(spec, cfg)
             payload = serializable_result(result)
-            payload.update({"source_name": spec.source_name, "signal_description": spec.signal_description})
+            payload.update({"source_name": spec.source_name, "signal_description": spec.signal_description, "data_quality": diagnosis})
             return jsonify(payload)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/diagnose", methods=["POST"])
+    def diagnose():
+        try:
+            spec = spectrum_from_request()
+            cfg = config_from_mapping(dict(request.form))
+            return jsonify(
+                diagnose_spectrum(
+                    spec,
+                    e0_hint=None if cfg.auto_e0 else cfg.e0,
+                    pre2=cfg.pre2,
+                    norm1=cfg.norm1,
+                )
+            )
         except Exception as exc:
             return jsonify({"error": str(exc)}), 400
 
@@ -333,6 +388,12 @@ def create_app() -> Flask:
         try:
             spec = spectrum_from_request()
             cfg = config_from_mapping(dict(request.form))
+            diagnosis = diagnose_spectrum(
+                spec,
+                e0_hint=None if cfg.auto_e0 else cfg.e0,
+                pre2=cfg.pre2,
+                norm1=cfg.norm1,
+            )
             processed = process_spectrum_demeter(spec, cfg)
             uploads = [item for item in request.files.getlist("path_files") if item.filename]
             feff_result_id = request.form.get("feff_result_id", "").strip()
@@ -427,6 +488,7 @@ def create_app() -> Flask:
                 "sample": spec.source_name,
                 "path_files": path_names,
                 "request_parameters": {key: request.form.getlist(key) for key in request.form},
+                "data_quality": diagnosis,
                 "preprocessing": preprocessing,
                 "fit": output,
             }
@@ -621,7 +683,7 @@ def create_app() -> Flask:
                 },
             }
             zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
-            zf.writestr("request_and_provenance.json", json.dumps({"request_parameters": saved["request_parameters"], "stage_history": fit["stage_history"], "manager_decisions": fit["manager_decisions"], "warnings": fit["warnings"]}, ensure_ascii=False, indent=2))
+            zf.writestr("request_and_provenance.json", json.dumps({"request_parameters": saved["request_parameters"], "data_quality": saved.get("data_quality"), "stage_history": fit["stage_history"], "manager_decisions": fit["manager_decisions"], "warnings": fit["warnings"]}, ensure_ascii=False, indent=2))
             energy_keys = [key for key in ("energy", "mu", "norm", "flat", "display_norm", "pre_edge", "post_edge", "dmude") if key in pre]
             zf.writestr("energy_space.csv", csv_text(energy_keys, [list(row) for row in zip(*(pre[key] for key in energy_keys))]))
             zf.writestr("energy_space_exafs_fit.csv", csv_text(["energy_eV", "experimental_chiE", "fit_chiE", "residual_chiE"], [list(row) for row in zip(fit["energy_fit_eV"], fit["energy_data_chi"], fit["energy_model_chi"], fit["energy_residual_chi"])]))
@@ -667,7 +729,28 @@ def create_app() -> Flask:
             radius = float(request.form.get("cluster_radius", 7.0))
             if not 3.0 <= radius <= 12.0:
                 raise ValueError("FEFF 团簇半径应在 3–12 Å 之间")
-            from larch.utils import bindir
+            result = generate_native_feff(upload.read().decode("utf-8", errors="ignore"), absorber, edge, radius)
+            archive_bytes = result["archive"]
+            path_rows = result["paths"]
+            generated_bytes = result["path_files"]
+            if request.form.get("response_mode") == "json":
+                feff_id = uuid.uuid4().hex
+                saved_feff = {
+                    "archive": archive_bytes,
+                    "download_name": f"{absorber}_{edge}_FEFF_paths.zip",
+                    "path_files": generated_bytes,
+                    "paths": path_rows,
+                }
+                with FEFF_RESULTS_LOCK:
+                    FEFF_RESULTS[feff_id] = saved_feff
+                    FEFF_RESULTS.move_to_end(feff_id)
+                    while len(FEFF_RESULTS) > MAX_SAVED_FEFF:
+                        FEFF_RESULTS.popitem(last=False)
+                return jsonify({"feff_result_id": feff_id, "paths": path_rows, "download_url": f"/api/feff/results/{feff_id}/download", "count": len(path_rows)})
+            return send_file(BytesIO(archive_bytes), mimetype="application/zip", as_attachment=True, download_name=f"{absorber}_{edge}_FEFF_paths.zip")
+            # Kept only as legacy unreachable code while preserving old source layout.
+            # CIF-to-FEFF requests return through generate_native_feff above.
+            raise RuntimeError("Legacy FEFF implementation is unreachable")
             from pymatgen.core import Structure
             from pymatgen.io.feff.sets import MPEXAFSSet
 
@@ -738,7 +821,7 @@ def create_app() -> Flask:
                         match = re.match(r"\s*(feff\d+\.dat)\s+\S+\s+(\S+)", line, re.IGNORECASE)
                         if match:
                             file_ranks[match.group(1).lower()] = float(match.group(2))
-                from larch.xafs import feffpath
+                raise RuntimeError("Legacy FEFF implementation is unreachable")
 
                 path_rows = []
                 for path in generated:
@@ -921,8 +1004,23 @@ def create_app() -> Flask:
 
 
 def main() -> None:
+    host = os.environ.get("XAFS_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    try:
+        port = int(os.environ.get("XAFS_PORT", "8765"))
+    except ValueError as exc:
+        raise SystemExit("XAFS_PORT 必须是整数") from exc
+    if not 1 <= port <= 65535:
+        raise SystemExit("XAFS_PORT 必须在 1–65535 之间")
+    try:
+        local_bind = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        local_bind = host.lower() == "localhost"
+    if not local_bind and not os.environ.get("XAFS_ACCESS_TOKEN", "").strip():
+        raise SystemExit("网络监听必须设置 XAFS_ACCESS_TOKEN；请使用 run_xafs_workbench_network.ps1 启动。")
+    from waitress import serve
+
     app = create_app()
-    app.run(host="127.0.0.1", port=8765, debug=False)
+    serve(app, host=host, port=port, threads=4)
 
 
 if __name__ == "__main__":

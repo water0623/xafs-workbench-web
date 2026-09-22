@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XAFS Workbench</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=34) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=35) }}">
 </head>
 <body>
   <header>
@@ -101,6 +101,19 @@
             <label class="slider-label">拖动实时调节<input id="e0-slider" type="range" min="11180" max="11250" value="11215" step="0.1"></label>
             <output id="e0-live-value">11215.0 eV</output>
           </div>
+          <details class="data-quality-builder" open>
+            <summary>数据异常诊断与截断建议</summary>
+            <p class="hint">先检查当前数据，再决定是否截断。系统不会把 Ir 的 11115 eV 套用到其他元素或其他扫描，也不会用最低 R-factor 反推截断点。</p>
+            <div class="toolbar">
+              <button id="diagnose-data" class="secondary" type="button">诊断当前数据</button>
+              <button id="apply-diagnosed-cut" class="secondary" type="button" hidden>应用建议下限</button>
+              <button id="clear-energy-cut" class="secondary" type="button">清除能量截断</button>
+            </div>
+            <div id="quality-message" class="message">尚未诊断。无异常证据时应保留完整能量范围。</div>
+            <div id="quality-metrics" class="metrics"></div>
+            <div id="quality-evidence"></div>
+            <div id="plot-quality" class="plot"><p class="hint">诊断后显示原始 μ(E)、估计 E₀ 和建议截断位置。</p></div>
+          </details>
           <div class="grid three">
             <label>能量校准 ΔE (eV)<input name="energy_shift" value="0" type="number" step="0.1"></label>
             <label>截取下限 (eV)<input name="energy_min" placeholder="留空不截取" type="number" step="0.1"></label>
@@ -271,6 +284,6 @@
   </main>
 
   <footer>结果必须结合标准样、合理的 S₀² 和独立点数审查后再用于论文。</footer>
-  <script src="{{ url_for('static', filename='app.js', v=34) }}"></script>
+  <script src="{{ url_for('static', filename='app.js', v=35) }}"></script>
 </body>
 </html>

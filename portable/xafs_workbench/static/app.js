@@ -4,6 +4,7 @@ const $$=s=>[...document.querySelectorAll(s)];
 let lastFit=null;
 let lastBatch=null;
 let lastAthena=null;
+let lastDiagnosis=null;
 let processController=null;
 let e0Timer=null;
 let rememberedShift=Number(localStorage.getItem('xafs.energyShift')||0);
@@ -224,7 +225,7 @@ async function runProcess(form,quiet=false){
   if(!quiet)message('#athena-message','正在处理…');
   try{
     const d=await jsonFetch('/api/athena',{method:'POST',body:new FormData(form),signal:processController.signal});
-    lastAthena=d;$('#download-energy').hidden=false;$('#download-project').hidden=false;$('#send-to-fit').hidden=false;updateFitRangeMode();
+    lastAthena=d;lastDiagnosis=d.data_quality||lastDiagnosis;$('#download-energy').hidden=false;$('#download-project').hidden=false;$('#send-to-fit').hidden=false;updateFitRangeMode();
     $('#fit-source').innerHTML=`<strong>已自动接收：</strong>${escapeHtml(d.source_name)} · E₀ ${d.e0.toFixed(2)} eV · ΔE ${Number(d.energy_shift).toFixed(3)} eV · kmax ${d.kmax_used.toFixed(2)} Å⁻¹`;
     message('#athena-message',`${d.source_name} · ${d.signal_description} · ${d.backend}`,'ok');
     metrics('#athena-metrics',[['E₀',`${d.e0.toFixed(2)} eV`],['Edge step',d.edge_step.toPrecision(5)],['归一化',d.normalization_mode],['白线',`${d.white_line_energy.toFixed(2)} eV / ${d.white_line_height.toFixed(3)}`],['清除点数',d.removed_points],['kmax',`${d.kmax_used.toFixed(2)} Å⁻¹`],['后端',d.backend]]);
@@ -238,11 +239,53 @@ async function runProcess(form,quiet=false){
     drawPlot('#plot-derivative',[{name:'dμ/dE',x:d.energy,y:d.dmude}], 'Energy (eV)','d(normalized μ)/dE',{vlines:[{x:e0,label:`E₀ ${e0.toFixed(1)} eV`} ]});
     drawPlot('#plot-k',[{name:'k²χ(k)',x:d.k,y:d.chi.map((v,i)=>v*d.k[i]**2)},{name:'window',x:d.k,y:d.kwin}], 'k (Å⁻¹)','weighted χ(k)',{bands:[{from:kmin,to:kmax,label:`k=${kmin}–${kmax} Å⁻¹`,color:'#a78bfa'}]});
     lastRData=d;renderRPlot();
+    if(d.data_quality)renderDataQuality(d.data_quality);
   }catch(err){if(err.name!=='AbortError')message('#athena-message',err.message,'error')}
 }
 
 $('#process-form').onsubmit=e=>{
   e.preventDefault();runProcess(e.target);
+};
+
+function renderDataQuality(result){
+  lastDiagnosis=result;
+  const labels={none:'未发现需要截断的连续异常前段',leading_truncation:'建议前段截断',local_mask:'发现孤立异常候选点',unusable:'数据不足或异常过宽'};
+  const types={none:'ok',leading_truncation:'',local_mask:'',unusable:'error'};
+  message('#quality-message',`${labels[result.decision]||result.decision}。${result.action}`,types[result.decision]||'');
+  const m=result.metrics;
+  metrics('#quality-metrics',[
+    ['诊断决定',labels[result.decision]||result.decision],
+    ['估计 E₀',`${Number(m.estimated_e0_eV).toFixed(2)} eV`],
+    ['原始范围',`${Number(m.original_energy_min_eV).toFixed(2)}–${Number(m.original_energy_max_eV).toFixed(2)} eV`],
+    ['保留点数',`${m.retained_points} / ${m.original_points}`],
+    ['剩余预边',`${m.pre_edge_points_remaining} 点 / ${Number(m.pre_edge_span_remaining_eV).toFixed(1)} eV`],
+    ['建议下限',result.recommended_energy_min_eV===null?'不截断':`${Number(result.recommended_energy_min_eV).toFixed(3)} eV`],
+  ]);
+  const rows=[...result.evidence.map(text=>({level:'证据',text})),...result.warnings.map(text=>({level:'警告',text})),{level:'规则',text:result.policy}];
+  $('#quality-evidence').innerHTML=table(rows,['level','text']);
+  const cutoff=result.recommended_energy_min_eV,e0=Number(m.estimated_e0_eV),vlines=[{x:e0,label:`E₀ ${e0.toFixed(1)} eV`}];
+  if(cutoff!==null)vlines.push({x:Number(cutoff),label:`建议保留起点 ${Number(cutoff).toFixed(1)} eV`});
+  drawPlot('#plot-quality',[{name:'原始 μ(E)',x:result.plot.energy_eV,y:result.plot.mu}], 'Energy (eV)','μ(E)',{vlines});
+  $('#apply-diagnosed-cut').hidden=cutoff===null;
+}
+
+$('#diagnose-data').onclick=async()=>{
+  message('#quality-message','正在检查能量顺序、导入异常、预边稳定性和孤立毛刺…');
+  try{
+    const result=await jsonFetch('/api/diagnose',{method:'POST',body:new FormData($('#process-form'))});
+    renderDataQuality(result);
+  }catch(err){message('#quality-message',err.message,'error')}
+};
+$('#apply-diagnosed-cut').onclick=()=>{
+  const cutoff=lastDiagnosis?.recommended_energy_min_eV;
+  if(cutoff===null||cutoff===undefined){message('#quality-message','当前诊断不建议前段截断。','ok');return}
+  $('#process-form').elements.energy_min.value=Number(cutoff).toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
+  message('#quality-message',`已填写截取下限 ${cutoff} eV；正在按该边界处理。`,'ok');
+  runProcess($('#process-form'));
+};
+$('#clear-energy-cut').onclick=()=>{
+  $('#process-form').elements.energy_min.value='';
+  message('#quality-message','已清除能量截断；处理时保留完整范围。','ok');
 };
 
 const e0Number=$('#e0-number'),e0Slider=$('#e0-slider'),autoE0=$('[name="auto_e0"]');

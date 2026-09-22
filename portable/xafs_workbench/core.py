@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -57,6 +57,7 @@ class Spectrum:
     mu: np.ndarray
     source_name: str
     signal_description: str
+    audit: dict[str, Any] = field(default_factory=dict)
 
 
 def _numeric_rows(text: str) -> tuple[list[str], np.ndarray]:
@@ -104,6 +105,7 @@ def read_spectrum(
         return data[:, resolved].astype(float)
 
     energy = col(energy_column)
+    original_energy = energy.copy()
     mode = signal_mode.lower()
     header_text = " ".join(header).lower()
     if mode == "auto":
@@ -116,9 +118,16 @@ def read_spectrum(
         else:
             mode = "direct"
 
+    invalid_signal_rows = 0
+    selected_channel_audit: dict[str, Any] = {}
     if mode == "transmission":
         i0, it = col(i0_column), col(it_if_column)
         valid = (i0 > 0) & (it > 0)
+        invalid_signal_rows = int((~valid).sum())
+        selected_channel_audit = {
+            "i0_zero_or_negative": int((i0 <= 0).sum()),
+            "it_zero_or_negative": int((it <= 0).sum()),
+        }
         if valid.sum() < 5:
             raise ValueError("透射通道存在零值或负值，无法计算 ln(I0/It)")
         mu = np.full_like(i0, np.nan)
@@ -127,6 +136,8 @@ def read_spectrum(
     elif mode == "fluorescence":
         i0, iff = col(i0_column), col(it_if_column)
         valid = i0 != 0
+        invalid_signal_rows = int((~valid).sum())
+        selected_channel_audit = {"i0_zero": int((i0 == 0).sum())}
         if valid.sum() < 5:
             raise ValueError("I0 通道为零，无法计算 If/I0")
         mu = np.full_like(i0, np.nan)
@@ -139,13 +150,27 @@ def read_spectrum(
         raise ValueError("signal_mode 必须为 auto/direct/transmission/fluorescence")
 
     finite = np.isfinite(energy) & np.isfinite(mu)
+    nonfinite_rows = int((~finite).sum())
     energy, mu = energy[finite], mu[finite]
+    nonmonotonic_steps = int((np.diff(energy) < 0).sum())
+    duplicate_energy_points = int(len(energy) - len(np.unique(energy)))
     order = np.argsort(energy)
     energy, mu = energy[order], mu[order]
     keep = np.r_[True, np.diff(energy) > 1e-9]
     if keep.sum() < 20:
         raise ValueError("有效且不重复的数据点少于 20 个")
-    return Spectrum(energy[keep], mu[keep], source_name, description)
+    audit = {
+        "numeric_rows": int(data.shape[0]),
+        "column_count": int(ncol),
+        "nonfinite_rows_removed": nonfinite_rows,
+        "invalid_signal_rows": invalid_signal_rows,
+        "nonmonotonic_energy_steps": nonmonotonic_steps,
+        "duplicate_energy_points_removed": duplicate_energy_points,
+        "original_energy_min_eV": float(np.nanmin(original_energy)),
+        "original_energy_max_eV": float(np.nanmax(original_energy)),
+        **selected_channel_audit,
+    }
+    return Spectrum(energy[keep], mu[keep], source_name, description, audit)
 
 
 def read_spectrum_file(path: Path, **kwargs: Any) -> Spectrum:
@@ -305,7 +330,7 @@ def _clean_spectrum(spec: Spectrum, cfg: ProcessConfig) -> tuple[Spectrum, np.nd
     removed = energy[~keep]
     if keep.sum() < 20:
         raise ValueError("清洗后有效数据点少于 20 个，请放宽截取或去毛刺条件")
-    cleaned = Spectrum(energy[keep], mu[keep], spec.source_name, spec.signal_description)
+    cleaned = Spectrum(energy[keep], mu[keep], spec.source_name, spec.signal_description, dict(spec.audit))
     return cleaned, removed
 
 
