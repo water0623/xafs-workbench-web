@@ -19,6 +19,8 @@ let backendConnected=false;
 const isGitHubPages=location.hostname.endsWith('.github.io');
 const queryApiBase=new URLSearchParams(location.search).get('api');
 const publicLanding=isGitHubPages&&!queryApiBase;
+const nativeBridgeBases=['http://127.0.0.1:8766','http://localhost:8766'];
+let nativeBridgeBase='';
 let apiBase=normalizeApiBase(queryApiBase||'');
 let accessToken=sessionStorage.getItem('xafs.accessToken')||'';
 if(isGitHubPages&&!queryApiBase)accessToken='';
@@ -101,15 +103,45 @@ async function jsonFetch(url,opts={}){const res=await apiFetch(url,opts);let dat
 async function downloadFromApi(url,fallbackName='download'){const res=await apiFetch(url);if(!res.ok){let detail='';try{detail=(await res.json()).error||''}catch{}throw new Error(detail||`下载失败（HTTP ${res.status}）`)}const blob=await res.blob(),disposition=res.headers.get('Content-Disposition')||'',match=disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i),name=match?decodeURIComponent(match[1]):fallbackName;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 async function fitFetchWithRecovery(formData){try{return await jsonFetch('/api/artemis',{method:'POST',body:formData})}catch(err){if(!String(err.message).toLowerCase().includes('fetch'))throw err;message('#fit-message','本地服务连接瞬时中断，正在检查并自动重试一次…');await new Promise(resolve=>setTimeout(resolve,1200));await jsonFetch('/api/status');return jsonFetch('/api/artemis',{method:'POST',body:formData})}}
 
-function renderNativeTools(nativeTools){
+const nativeToolMeta={
+  athena:['Athena (Demeter)','能量空间数据标准化与 Athena 项目'],
+  artemis:['Artemis (Demeter)','FEFF / IFEFFIT 路径拟合'],
+  hephaestus:['Hephaestus (Demeter)','元素与吸收边数据库'],
+  feff:['FEFF','理论散射路径计算'],
+  hama:['HAMA Fortran','EXAFS 小波变换'],
+};
+function normalizeBridgeTools(tools){
+  return Object.fromEntries(Object.entries(tools||{}).map(([name,tool])=>[name,{
+    ...tool,name,available:Boolean(tool.installed),label:nativeToolMeta[name]?.[0]||name,
+    role:nativeToolMeta[name]?.[1]||'',homepage:tool.homepage||'#',process_ids:tool.process_ids||[],
+  }]));
+}
+async function bridgeJson(path,opts={}){
+  const bases=nativeBridgeBase?[nativeBridgeBase,...nativeBridgeBases.filter(base=>base!==nativeBridgeBase)]:nativeBridgeBases;
+  let lastError=new Error('未检测到本机桥接器');
+  for(const base of bases){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),2500);
+    try{
+      const response=await fetch(`${base}${path}`,{cache:'no-store',mode:'cors',...opts,signal:controller.signal});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
+      nativeBridgeBase=base;return data;
+    }catch(error){lastError=error}
+    finally{clearTimeout(timer)}
+  }
+  throw lastError;
+}
+
+function renderNativeTools(nativeTools,launchMode='backend'){
   const toolList=$('#native-tool-list');if(!toolList)return;
   toolList.innerHTML=Object.values(nativeTools).map(tool=>{
     const stateClass=tool.running?'running':(tool.available?'available':'missing');
     const detail=tool.running?`正在运行 · PID ${tool.process_ids.join(', ')}`:(tool.available?`已安装 · ${tool.source}`:'尚未检测到本机程序');
-    const disabled=tool.running||!tool.available||apiIsCrossOrigin()||backendIsRemote;
+    const disabled=tool.running||!tool.available||(launchMode==='backend'&&(apiIsCrossOrigin()||backendIsRemote));
     const label=tool.running?'已运行':'启动';
-    const title=(apiIsCrossOrigin()||backendIsRemote)&&!tool.running?'远程客户端不能启动服务机程序；请在服务机本地启动':'';
-    return `<article class="native-tool ${stateClass}"><div><strong>${escapeHtml(tool.label)}</strong><span>${escapeHtml(tool.role)}</span><small>${escapeHtml(detail)}</small></div><div class="toolbar"><a class="secondary" href="${escapeHtml(tool.homepage)}" target="_blank" rel="noopener">官方主页</a><button class="secondary native-launch" data-tool="${escapeHtml(tool.name)}" type="button" title="${escapeHtml(title)}" ${disabled?'disabled':''}>${label}</button></div></article>`;
+    const title=launchMode==='backend'&&(apiIsCrossOrigin()||backendIsRemote)&&!tool.running?'远程客户端不能启动服务机程序；请在服务机本地启动':'';
+    const homepage=tool.homepage&&tool.homepage!=='#'?`<a class="secondary" href="${escapeHtml(tool.homepage)}" target="_blank" rel="noopener">官方主页</a>`:'';
+    return `<article class="native-tool ${stateClass}"><div><strong>${escapeHtml(tool.label)}</strong><span>${escapeHtml(tool.role)}</span><small>${escapeHtml(detail)}</small></div><div class="toolbar">${homepage}<button class="secondary native-launch" data-tool="${escapeHtml(tool.name)}" data-launch-mode="${launchMode}" type="button" title="${escapeHtml(title)}" ${disabled?'disabled':''}>${label}</button></div></article>`;
   }).join('');
 }
 
@@ -130,46 +162,37 @@ function lockPublicInterface(){
   });
 }
 
-async function detectLocalWorkbench(){
-  const candidates=['http://127.0.0.1:8765/','http://localhost:8765/'];
-  for(const base of candidates){
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),1800);
-    try{
-      const response=await fetch(`${base}api/status?source=github-pages`,{cache:'no-store',mode:'cors',signal:controller.signal});
-      if(response.ok)return base;
-    }catch{}
-    finally{clearTimeout(timer)}
-  }
-  return '';
+async function refreshNativeBridge(){
+  const status=await bridgeJson('/api/native-tools/status');
+  const tools=normalizeBridgeTools(status.tools);
+  renderNativeTools(tools,'bridge');
+  const installed=Object.values(tools).filter(tool=>tool.available);
+  const running=Object.values(tools).filter(tool=>tool.running);
+  $('#backend-status').textContent=`本机桥接已连接 · 已安装 ${installed.length} · 正在运行 ${running.length}`;
+  $('#backend-status').classList.remove('warn');
+  message('#api-base-message',`已连接本机桥接器：${nativeBridgeBase}`,'ok');
+  message('#native-tool-message',running.length?`正在运行：${running.map(tool=>tool.label).join('、')}`:'已完成检测；当前没有检测到已打开的 Demeter / HAMA 程序。','ok');
+  return status;
 }
 
-function bindLocalWorkbenchLauncher(){
-  const button=$('#open-local-workbench');
+function bindNativeBridgeDetector(){
+  const button=$('#detect-native-bridge');
   if(!button)return;
   const defaultLabel=button.textContent;
   button.addEventListener('click',async event=>{
     event.preventDefault();
     if(button.getAttribute('aria-busy')==='true')return;
     button.setAttribute('aria-busy','true');
-    button.textContent='正在检测本机服务…';
-    message('#local-launch-message','正在检查 127.0.0.1 / localhost 的 XAFS Workbench 服务…');
-    const base=await detectLocalWorkbench();
-    button.removeAttribute('aria-busy');
-    if(base){
-      button.textContent='正在打开本机工作台…';
-      message('#local-launch-message',`已连接 ${base}，正在进入工作台。`,'ok');
-      window.location.assign(base);
-      return;
-    }
-    button.textContent='重新检测本机工作台';
-    message('#local-launch-message','未检测到本机工作台，因此没有打开空白页。请先下载并启动 XAFS-Workbench.exe，保持程序运行，再点击“重新检测本机工作台”。','error');
-    const download=$('#download-desktop-workbench');
-    if(download)download.focus();
-    setTimeout(()=>{if(button.textContent==='重新检测本机工作台')button.textContent=defaultLabel},10000);
+    button.textContent='正在检测本机桥接器…';
+    message('#local-launch-message','正在检查 127.0.0.1:8766 的本机桥接器…');
+    try{await refreshNativeBridge();message('#local-launch-message','桥接器连接成功；下方已显示每个程序的安装与运行状态。','ok');button.textContent='重新检测本机软件'}
+    catch{message('#local-launch-message','未检测到桥接器。请点击“下载并安装本机桥接器”，安装完成后再检测。','error');$('#download-native-bridge')?.focus();button.textContent=defaultLabel}
+    finally{button.removeAttribute('aria-busy')}
   });
 }
 
 async function refreshNativeTools(){
+  if(publicLanding)return refreshNativeBridge();
   if(!backendConnected){await boot();return}
   const result=await jsonFetch('/api/native/status');renderNativeTools(result.tools||{});
   const running=Object.values(result.tools||{}).filter(tool=>tool.running);
@@ -197,12 +220,13 @@ async function boot(){
   if(publicLanding){
     lockPublicInterface();
     renderDisconnectedNativeTools();
-    $('#refresh-native-tools').disabled=true;
+    $('#refresh-native-tools').disabled=false;
     $('#backend-status').textContent='公开说明页 · 未连接原生计算服务';
     $('#backend-status').classList.add('warn');
-    message('#api-base-message','桌面版运行后，点击上方“打开本机工作台”即可自动读取四个程序的安装与运行状态。');
+    message('#api-base-message','正在检测本机桥接器 127.0.0.1:8766…');
     message('#native-tool-message','当前为公开入口：计算控件已锁定，不会向 GitHub Pages 提交实验数据。');
     message('#athena-message','公开页不执行计算，因此不会再出现 HTTP 405。请进入本机或局域网工作台后处理数据。');
+    refreshNativeBridge().catch(()=>message('#api-base-message','尚未连接本机桥接器；请先点击上方下载并安装。','error'));
     return;
   }
   $('#refresh-native-tools').disabled=false;
@@ -241,7 +265,16 @@ document.addEventListener('click',async event=>{
   if(download){download.disabled=true;try{await downloadFromApi(download.dataset.url,download.dataset.name)}catch(err){message('#fit-message',err.message,'error')}finally{download.disabled=false}return}
   const button=event.target.closest('.native-launch');if(!button)return;
   button.disabled=true;message('#native-tool-message',`正在启动 ${button.dataset.tool}…`);
-  try{const result=await jsonFetch('/api/native/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:button.dataset.tool})});message('#native-tool-message',`${result.tool.label} 已启动。`,'ok');setTimeout(()=>refreshNativeTools().catch(()=>{}),1500)}
+  try{
+    if(button.dataset.launchMode==='bridge'){
+      await bridgeJson(`/api/native-tools/${button.dataset.tool}/launch`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      message('#native-tool-message',`${nativeToolMeta[button.dataset.tool]?.[0]||button.dataset.tool} 已启动，正在确认进程状态…`,'ok');
+    }else{
+      const result=await jsonFetch('/api/native/launch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:button.dataset.tool})});
+      message('#native-tool-message',`${result.tool.label} 已启动。`,'ok');
+    }
+    setTimeout(()=>refreshNativeTools().catch(()=>{}),1800)
+  }
   catch(err){message('#native-tool-message',err.message,'error')}
   finally{button.disabled=false}
 });
@@ -256,7 +289,7 @@ function handleBootFailure(err){
   if(!isGitHubPages)$('#manual-backend-connector').hidden=false;
 }
 $('#refresh-native-tools').onclick=()=>refreshNativeTools().catch(handleBootFailure);
-setInterval(()=>{if(backendConnected)refreshNativeTools().catch(()=>{})},8000);
+setInterval(()=>{if(backendConnected||nativeBridgeBase)refreshNativeTools().catch(()=>{})},5000);
 
 async function runProcess(form,quiet=false){
   if(processController)processController.abort();
@@ -614,5 +647,5 @@ $('#edge-form').onsubmit=async e=>{e.preventDefault();try{const d=await jsonFetc
 updateFitRangeMode();
 updateWaveletBackendMode();
 $('#refresh-fit-history').onclick=loadRecentFits;
-bindLocalWorkbenchLauncher();
+bindNativeBridgeDetector();
 boot().catch(handleBootFailure);

@@ -26,18 +26,17 @@
   <main>
     <section id="public-launch" class="card public-launch" hidden>
       <div>
-        <strong>启动本机工作台后自动匹配四个原生程序</strong>
-        <p>Windows 工作台启动后会自动搜索 Athena、Artemis、Hephaestus 和 HAMA，并启用下方全部数据处理功能。GitHub 公开页只提供安全入口，不会把实验数据提交到网站。</p>
+        <strong>安装一次本机桥接器，网页即可检测并启动原生程序</strong>
+        <p>桥接器只监听本机 <code>127.0.0.1</code>，自动搜索 Athena、Artemis、Hephaestus、FEFF 和 HAMA，并分别显示“已安装”和“正在运行”。实验数据不会提交到 GitHub Pages。</p>
       </div>
       <div class="public-launch-actions">
-        <a class="primary" href="./browser-fit.html">在线基础拟合（无需安装）</a>
-        <a id="open-local-workbench" class="primary" href="http://127.0.0.1:8765/">打开本机工作台</a>
-        <a id="download-desktop-workbench" class="secondary" href="https://github.com/water0623/xafs-workbench-web/releases/latest/download/XAFS-Workbench-Windows-Standalone.zip">下载 Windows 桌面版（推荐）</a>
-        <a class="secondary" href="./XAFS-Workbench-Windows.zip" download>下载 Python 便携包</a>
+        <a id="download-native-bridge" class="primary" href="https://github.com/cocoyou123456789-sketch/data/releases/latest/download/XAFS-Native-Bridge-Setup.exe">下载并安装本机桥接器</a>
+        <button id="detect-native-bridge" class="secondary" type="button">检测本机软件与运行状态</button>
+        <a class="secondary" href="./browser-fit.html">在线基础拟合</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
-      <p id="local-launch-message" class="message" aria-live="polite">无需安装可直接进入“在线基础拟合”；本机工作台按钮会先检测服务，仅在桌面版已经启动时打开。</p>
-      <p class="hint"><strong>首次使用：</strong>下载并解压桌面版，双击 <code>XAFS-Workbench.exe</code>；以后由它自动打开工作台并匹配四个程序。若“打开本机工作台”显示无法访问，表示桌面版尚未运行。跨电脑使用时请运行 <code>launch_network_workbench.cmd</code>，再打开脚本显示的主机名网址。</p>
+      <p id="local-launch-message" class="message" aria-live="polite">首次点击“下载并安装本机桥接器”；安装完成后桥接器会自动启动，再点击“检测本机软件与运行状态”。</p>
+      <p class="hint"><strong>每台电脑只需安装一次：</strong>桥接器随 Windows 登录启动。网页随后可检测本机软件、显示程序是否已经打开，并通过下方“启动”按钮打开已安装的软件。</p>
     </section>
     <details id="manual-backend-connector" class="card web-connector" hidden>
       <summary>网页计算后端连接</summary>
