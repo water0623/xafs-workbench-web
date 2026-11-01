@@ -18,6 +18,9 @@
       * {
         box-sizing: border-box;
       }
+      [hidden] {
+        display: none !important;
+      }
       body {
         margin: 0;
         background: var(--bg);
@@ -95,6 +98,11 @@
       .check input {
         min-height: auto;
       }
+      .checks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
       .toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -147,6 +155,10 @@
         margin: 4px 0 8px;
         color: var(--muted);
       }
+      .method {
+        border-left: 4px solid #13a6a0;
+        background: #f1fbfa;
+      }
       .results {
         display: grid;
         gap: 16px;
@@ -183,6 +195,7 @@
       }
       .legend {
         display: flex;
+        flex-wrap: wrap;
         gap: 18px;
         padding: 8px 12px;
         color: var(--muted);
@@ -215,6 +228,30 @@
         font-size: 12px;
         line-height: 1.65;
       }
+      .refs a {
+        color: #076c96;
+      }
+      .wavelet-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .wavelet-grid figure {
+        margin: 0;
+      }
+      .wavelet-grid canvas {
+        display: block;
+        width: 100%;
+        height: 240px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .wavelet-grid figcaption {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
       @media (max-width: 900px) {
         .layout {
           grid-template-columns: 1fr;
@@ -225,16 +262,19 @@
         .grid {
           grid-template-columns: 1fr;
         }
+        .wavelet-grid {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
   <body>
     <header class="hero">
-      <small>PRIVATE · IN-BROWSER COMPUTATION</small>
-      <h1>浏览器 EXAFS 基础拟合</h1>
+      <small>PRIVATE · LITERATURE-CONSTRAINED · IN-BROWSER</small>
+      <h1>硬线 XAS / EXAFS 文献约束拟合</h1>
       <p>
-        实验数据和 FEFF 路径只在当前浏览器内处理，不上传服务器。适用于已有
-        k–χ(k) 与 FEFF 路径的基础壳层拟合。
+        实验数据和 FEFF 路径只在当前浏览器内处理，不上传服务器。工具执行首壳诊断、
+        多壳联合、多起点与多 k-weight 稳定性审计，并保留本机 Athena/Artemis 复核入口。
       </p>
     </header>
     <main class="shell">
@@ -255,8 +295,51 @@
           >
         </div>
       </section>
+      <section class="notice method">
+        <strong>硬线 XAS / EXAFS 文献约束方法</strong>
+        <p>
+          浏览器拟合按“首壳诊断 → 多壳联合 → 多起点与多 k-weight 稳定性审计”运行，并区分标准样 S₀² 标定与未知样配位数 N 拟合。网页不运行 FEFF、AUTOBK 或 IFEFFIT，出版级结果仍应在 Athena/Artemis 中复核。
+        </p>
+        <p class="hint refs">
+          方法依据：<a href="https://doi.org/10.1107/S0909049505012719" target="_blank" rel="noopener">Ravel &amp; Newville 2005</a>；
+          <a href="https://doi.org/10.1107/S0909049598002970" target="_blank" rel="noopener">Michalowicz &amp; Vlaic 1998</a>；
+          <a href="https://doi.org/10.1103/PhysRevB.48.9825" target="_blank" rel="noopener">Stern 1993</a>；
+          <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2816928/" target="_blank" rel="noopener">Delgado-Jaime &amp; Kennepohl 2010</a>；
+          <a href="https://doi.org/10.1021/acs.chemrev.0c00396" target="_blank" rel="noopener">Timoshenko &amp; Roldan Cuenya 2021</a>。
+        </p>
+      </section>
       <div class="layout">
         <form id="fit-form" class="card">
+          <section class="path method">
+            <h2>文献约束拟合协议</h2>
+            <div class="grid">
+              <label>样品角色
+                <select id="analysis-role" name="analysis_role">
+                  <option value="unknown" selected>未知样：固定 S₀²，拟合 N</option>
+                  <option value="standard">标准样：固定 N，标定 S₀²</option>
+                </select>
+              </label>
+              <label>壳层策略
+                <select id="stage-mode" name="stage_mode">
+                  <option value="staged" selected>先首壳，再联合第二壳</option>
+                  <option value="joint">直接联合（仅用于敏感性对照）</option>
+                </select>
+              </label>
+              <label>多起点独立拟合次数
+                <input id="multi-start-count" name="multi_start_count" type="number" value="3" min="1" max="8" />
+              </label>
+              <label>可复现随机种子
+                <input id="fit-seed" name="fit_seed" type="number" value="202603" step="1" />
+              </label>
+            </div>
+            <strong>k-weight 一致性审计</strong>
+            <div class="checks">
+              <label class="check"><input name="audit_kweight" type="checkbox" value="1" />k¹</label>
+              <label class="check"><input name="audit_kweight" type="checkbox" value="2" checked />k²</label>
+              <label class="check"><input name="audit_kweight" type="checkbox" value="3" />k³</label>
+            </div>
+            <p id="policy-status" class="hint">未知样模式会锁定 S₀² 并允许单散射路径的 N 变化；不会允许 S₀² 与 N 同时自由变化。</p>
+          </section>
           <h2>输入与参数</h2>
           <label
             >实验数据（两列或多列文本/CSV）<input
@@ -458,6 +541,24 @@
         </form>
         <section class="results">
           <div class="card">
+            <h3>方法与物理约束审计</h3>
+            <div id="protocol-audit" class="status">运行后显示 S₀²–N 策略、分阶段结果、Nind/Nvar 与边界告警。</div>
+          </div>
+          <div class="card">
+            <h3>多起点与多 k-weight 稳定性</h3>
+            <div id="stability" class="table-wrap"></div>
+          </div>
+          <div class="card">
+            <h3>Morlet/Gabor 小波诊断</h3>
+            <div class="wavelet-grid">
+              <figure><canvas id="wavelet-data" width="420" height="240"></canvas><figcaption>实验 χ(k)</figcaption></figure>
+              <figure><canvas id="wavelet-fit" width="420" height="240"></canvas><figcaption>拟合 χ(k)</figcaption></figure>
+              <figure><canvas id="wavelet-residual" width="420" height="240"></canvas><figcaption>残差</figcaption></figure>
+            </div>
+            <p class="hint">小波图仅用于诊断 k–R 局域特征和遗漏路径，不是独立的配位数测量。</p>
+            <div class="toolbar"><button id="download-method-report" type="button" hidden>下载方法审计报告</button></div>
+          </div>
+          <div class="card">
             <h2>拟合摘要</h2>
             <div id="metrics" class="metrics"></div>
             <p id="quality" class="status"></p>
@@ -500,6 +601,6 @@
         </section>
       </div>
     </main>
-    <script src="./static/browser-fit.js?v=6"></script>
+    <script src="./static/browser-fit.js?v=7-hard-xas"></script>
   </body>
 </html>
