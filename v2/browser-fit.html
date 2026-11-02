@@ -341,6 +341,16 @@
             <p id="policy-status" class="hint">未知样模式会锁定 S₀² 并允许单散射路径的 N 变化；不会允许 S₀² 与 N 同时自由变化。</p>
           </section>
           <h2>输入与参数</h2>
+          <section class="path">
+            <h3>数据库样品信息</h3>
+            <div class="grid">
+              <label>样品名称（入库必填）<input id="db-sample-name" placeholder="例如 PbIrOₓ-01" /></label>
+              <label>化学式<input id="db-formula" placeholder="例如 PbIrO₃" /></label>
+              <label>样品编号/批次<input id="db-sample-id" placeholder="例如 2026-XAS-01" /></label>
+              <label>实验日期<input id="db-experiment-date" type="date" /></label>
+              <label>数据库备注<input id="db-notes" placeholder="束线、温度、气氛或独立结构证据" /></label>
+            </div>
+          </section>
           <label
             >实验数据（两列或多列文本/CSV）<input
               id="data-file"
@@ -591,8 +601,13 @@
                 下载参数 CSV</button
               ><button id="download-json" type="button" hidden>
                 下载完整 JSON
+              </button><button id="download-db-record" type="button">
+                下载数据库记录
+              </button><button id="send-to-chemistry" type="button">
+                一键加入化学数据库
               </button>
             </div>
+            <p id="db-status" class="status">填写样品名称并完成拟合后，可把谱图、拟合参数和配位结构加入化学模块。</p>
             <p class="hint">
               条件标准误仅在数值雅可比矩阵可逆时报告；固定参数不是独立测量结果。未作相位校正的
               R 峰位不能直接当作键长，单散射距离应读取 Reff+ΔR。
