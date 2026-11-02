@@ -10,6 +10,8 @@ class PublicNativeBridgeTests(unittest.TestCase):
         for relative in ("index.html", "v2/index.html"):
             html = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn("XAFS-Native-Bridge-Setup.exe", html)
+            self.assertIn("下载 Windows 一键安装包", html)
+            self.assertIn("XAFS 硬线拟合工作台", html)
             self.assertIn('id="detect-native-bridge"', html)
             self.assertNotIn('id="open-local-workbench"', html)
             self.assertNotIn('id="download-desktop-workbench"', html)
@@ -26,6 +28,11 @@ class PublicNativeBridgeTests(unittest.TestCase):
         expected = (ROOT / "v2/static/app.js").read_bytes()
         self.assertEqual(expected, (ROOT / "static/app.js").read_bytes())
         self.assertEqual(expected, (ROOT / "portable/xafs_workbench/static/app.js").read_bytes())
+
+    def test_browser_fit_explains_desktop_app_installation(self):
+        html = (ROOT / "v2" / "browser-fit.html").read_text(encoding="utf-8")
+        self.assertIn("下载 Windows 一键安装包", html)
+        self.assertIn("安装完成后桌面会出现“XAFS 硬线拟合工作台”", html)
 
 
 if __name__ == "__main__":

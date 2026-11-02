@@ -30,13 +30,13 @@
         <p>桥接器只监听本机 <code>127.0.0.1</code>，自动搜索 Athena、Artemis、Hephaestus、FEFF 和 HAMA，并分别显示“已安装”和“正在运行”。实验数据不会提交到 GitHub Pages。</p>
       </div>
       <div class="public-launch-actions">
-        <a id="download-native-bridge" class="primary" href="https://github.com/cocoyou123456789-sketch/data/releases/latest/download/XAFS-Native-Bridge-Setup.exe">下载并安装本机桥接器</a>
+        <a id="download-native-bridge" class="primary" href="https://github.com/cocoyou123456789-sketch/data/releases/latest/download/XAFS-Native-Bridge-Setup.exe">下载 Windows 一键安装包</a>
         <button id="detect-native-bridge" class="secondary" type="button">检测本机软件与运行状态</button>
         <a class="secondary" href="./browser-fit.html">在线基础拟合</a>
         <a class="secondary" href="./docs/XAFS_Workbench_data_processing_and_staged_fitting_CN.pdf" target="_blank" rel="noopener">查看数据处理与拟合说明</a>
       </div>
-      <p id="local-launch-message" class="message" aria-live="polite">首次点击“下载并安装本机桥接器”；安装完成后桥接器会自动启动，再点击“检测本机软件与运行状态”。</p>
-      <p class="hint"><strong>每台电脑只需安装一次：</strong>桥接器随 Windows 登录启动。网页随后可检测本机软件、显示程序是否已经打开，并通过下方“启动”按钮打开已安装的软件。</p>
+      <p id="local-launch-message" class="message" aria-live="polite">首次下载并运行安装包；安装完成后桌面会生成“XAFS 硬线拟合工作台”，双击即可一键启动并打开拟合页面。</p>
+      <p class="hint"><strong>每台电脑只需安装一次：</strong>桥接器随 Windows 登录启动。桌面 App 会自动连接本机桥接，网页可检测软件状态并启动 Athena、Artemis、Hephaestus 和 HAMA。</p>
     </section>
     <details id="manual-backend-connector" class="card web-connector" hidden>
       <summary>网页计算后端连接</summary>
